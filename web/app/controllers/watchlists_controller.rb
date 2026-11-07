@@ -18,7 +18,7 @@ class WatchlistsController < ApplicationController
       watchlist.set_target(params[:item_id], params[:series], target)
       save_watchlist
     else
-      flash[:alert] = "“#{text.first(30)}” is not an amount: write it like 12g 50s, or 12.5 for gold."
+      flash[:alert] = "“#{text.first(30)}” is not an amount: write it like 12g 50s, 12.5 for gold, or 1.5k for 1,500 gold."
     end
     redirect_back_or_to watchlist_path, status: :see_other
   end

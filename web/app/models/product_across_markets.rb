@@ -11,20 +11,33 @@ class ProductAcrossMarkets
     @realm = realm
   end
 
-  # The cheapest first.
+  # The cheapest first. The reader's own market comes last when it is not among them, so
+  # that there is always something to compare to.
   def rows
-    @rows ||= ListedProduct
-      .joins("JOIN auction_houses houses ON houses.id = listed_products.auction_house_id")
-      .where(item_id: @item_id, series: @series)
-      .where(houses: { region: @market.region })
-      .order(:min_price, :auction_house_id)
-      .limit(LIMIT)
-      .to_a
+    @rows ||= begin
+      cheapest = listed.order(:min_price, :auction_house_id).limit(LIMIT).to_a
+      own = listed.find_by(auction_house_id: @market.id) if cheapest.none? { |row| current?(row) }
+      own ? cheapest + [ own ] : cheapest
+    end
   end
 
   def comparable? = rows.many?
 
   def current?(row) = row.auction_house_id == @market.id
+
+  # How many markets of the region have it on sale.
+  def market_count
+    @market_count ||= listed.count
+  end
+
+  # Where the reader's own market stands among them, 1 for the cheapest. Nil when it is
+  # not on sale there.
+  def rank
+    return @rank if defined?(@rank)
+
+    own = rows.find { |row| current?(row) }
+    @rank = own && listed.where("listed_products.min_price < ?", own.min_price).count + 1
+  end
 
   # The realms of a row, by name, with the reader's own first on its row.
   def realms_of(row)
@@ -33,6 +46,13 @@ class ProductAcrossMarkets
   end
 
   private
+
+  def listed
+    ListedProduct
+      .joins("JOIN auction_houses houses ON houses.id = listed_products.auction_house_id")
+      .where(item_id: @item_id, series: @series)
+      .where(houses: { region: @market.region })
+  end
 
   def realms_by_market
     @realms_by_market ||= Realm.where(auction_house_id: rows.map(&:auction_house_id)).by_name.group_by(&:auction_house_id)

@@ -65,4 +65,34 @@ class ProductAcrossMarketsTest < ActiveSupport::TestCase
 
     assert_equal ProductAcrossMarkets::LIMIT, across.rows.size
   end
+
+  test "keeps the reader's own market, last, when it is not among the cheapest" do
+    create_price(@hyjal, 1, NOW, min: 900)
+    create_price(@american, 1, NOW, min: 1)
+    (1..ProductAcrossMarkets::LIMIT + 2).each do |id|
+      market = create_market(connected_realm_id: 5_000 + id, name: "Realm #{id}")
+      create_snapshot(market, NOW)
+      create_price(market, 1, NOW, min: 100 + id)
+    end
+
+    assert_equal ProductAcrossMarkets::LIMIT + 1, across.rows.size
+    assert across.current?(across.rows.last)
+    assert_equal ProductAcrossMarkets::LIMIT + 3, across.market_count
+    assert_equal ProductAcrossMarkets::LIMIT + 3, across.rank
+  end
+
+  test "ranks the reader's market among those of its region, ties sharing a rank" do
+    create_price(@hyjal, 1, NOW, min: 100)
+    create_price(@archimonde, 1, NOW, min: 100)
+    create_price(@american, 1, NOW, min: 1)
+
+    assert_equal 1, across.rank
+    assert_equal 2, across.market_count
+  end
+
+  test "has no rank where the product is not on sale" do
+    create_price(@archimonde, 1, NOW)
+
+    assert_nil across.rank
+  end
 end

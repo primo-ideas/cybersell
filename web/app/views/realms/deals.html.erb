@@ -27,10 +27,10 @@
           <th scope="col">Product</th>
           <th scope="col" class="number"><span data-tip="<%= term(:minimum) %>" tabindex="0">Cheapest now</span></th>
           <th scope="col" class="number col-medium"><span data-tip="<%= term(:usual) %>" tabindex="0">Usually</span></th>
-          <th scope="col" class="number"><%= deals_sort_link "Below usual", "discount", @deals, current_realm, tip: term(:below_usual) %></th>
-          <th scope="col" class="number"><%= deals_sort_link "Resale profit", "profit", @deals, current_realm, tip: term(:resale) %></th>
+          <%= deals_sort_header "Below usual", "discount", @deals, current_realm, tip: term(:below_usual), css_class: "number" %>
+          <%= deals_sort_header "Resale profit", "profit", @deals, current_realm, tip: term(:resale), css_class: "number" %>
           <th scope="col" class="number col-medium"><span data-tip="<%= term(:for_sale) %>" tabindex="0">For sale</span></th>
-          <th scope="col" class="number col-wide"><%= deals_sort_link "Sold, 24h", "sold", @deals, current_realm, tip: term(:sold) %></th>
+          <%= deals_sort_header "Sold, 24h", "sold", @deals, current_realm, tip: term(:sold), css_class: "number col-wide" %>
         </tr>
       </thead>
       <tbody>

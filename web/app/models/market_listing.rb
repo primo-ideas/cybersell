@@ -15,7 +15,7 @@ class MarketListing
   # Far past any real listing, and keeps the offset within what Postgres accepts.
   MAX_PAGE = 100_000
 
-  attr_reader :sort, :page, :query, :item_class, :quality
+  attr_reader :sort, :query, :item_class, :quality
 
   def initialize(markets, query: nil, item_class: nil, quality: nil, sort: nil, dir: nil, page: nil)
     @market_query = MarketQuery.new(markets)
@@ -24,8 +24,12 @@ class MarketListing
     @quality = quality.to_s.delete("\0").presence
     @sort = SORTS.key?(sort) ? sort : DEFAULT_SORT
     @dir = dir if %w[asc desc].include?(dir)
-    @page = page.to_s.to_i.clamp(1, MAX_PAGE)
+    @requested_page = page.to_s.to_i.clamp(1, MAX_PAGE)
   end
+
+  # Past the end, as an old link may be once the listing has shrunk, the last page rather
+  # than an empty one that says nothing matches.
+  def page = [ @requested_page, page_count ].min
 
   def dir = @dir || default_dir(sort)
 

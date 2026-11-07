@@ -89,9 +89,13 @@
     input.addEventListener("focus", () => {
       if (list.children.length && input.value.trim()) open();
     });
-    document.addEventListener("click", (event) => {
-      if (input.isConnected && event.target !== input && !list.contains(event.target)) close();
-    });
+    // Turbo replaces the page without reloading this script: once the box is gone, so is
+    // this listener, rather than piling up with every page visited.
+    const closeOutside = (event) => {
+      if (!input.isConnected) return document.removeEventListener("click", closeOutside);
+      if (event.target !== input && !list.contains(event.target)) close();
+    };
+    document.addEventListener("click", closeOutside);
 
     return { open, close, reset, options };
   }
@@ -111,12 +115,20 @@
       if (query.length < 2) return;
 
       const request = ++latestRequest;
-      const response = await fetch(`${form.action}?q=${encodeURIComponent(query)}&fragment=1`);
+      let html;
+      try {
+        const response = await fetch(`${form.action}?q=${encodeURIComponent(query)}&fragment=1`);
+        if (!response.ok) return;
+        html = await response.text();
+      } catch {
+        // Offline or the site restarting: the form still submits as a plain search.
+        return;
+      }
       // A slower, older answer must not replace a newer one.
-      if (request !== latestRequest || !response.ok) return;
+      if (request !== latestRequest) return;
 
       // Rendered and escaped by the server, like any other page.
-      results.innerHTML = await response.text();
+      results.innerHTML = html;
       box.reset();
       if (document.activeElement === input) box.open();
     }, SEARCH_DELAY);

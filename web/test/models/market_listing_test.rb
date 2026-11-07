@@ -227,10 +227,24 @@ class MarketListingTest < ActiveSupport::TestCase
     assert_equal 1, listing(page: [ "2" ]).page
   end
 
-  test "an absurd page is simply empty" do
-    create_price(@market, 2589, NOW)
+  # An old link, once the listing has shrunk, or an absurd number.
+  test "a page past the end shows the last one" do
+    stub_const(MarketListing, :PAGE_SIZE, 2) do
+      [ 1, 2, 3 ].each { |id| create_price(@market, id, NOW) }
 
-    assert_empty listing(page: "9" * 40).rows
+      [ "3", "9" * 40 ].each do |page|
+        past = listing(sort: "price", page: page)
+
+        assert_equal 2, past.page
+        assert_equal 1, past.rows.size
+        assert_not past.next_page?
+      end
+    end
+  end
+
+  test "a listing with nothing for sale has a single, empty page" do
+    assert_equal 1, listing(page: "5").page
+    assert_empty listing(page: "5").rows
   end
 
   test "a null byte in the search does not reach the database" do

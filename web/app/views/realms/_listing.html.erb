@@ -23,14 +23,14 @@
     <table class="listing">
       <thead>
         <tr>
-          <th scope="col"><%= sort_link "Product", "name", listing, realm %></th>
+          <%= sort_header "Product", "name", listing, realm %>
           <th scope="col" class="col-wide"><span data-tip="<%= term(:sparkline) %>" tabindex="0">7 days</span></th>
-          <th scope="col" class="number"><%= sort_link "Median", "price", listing, realm, tip: term(:median) %></th>
-          <th scope="col" class="number col-medium"><%= sort_link "Minimum", "min", listing, realm, tip: term(:minimum) %></th>
-          <th scope="col" class="number"><%= sort_link "24h", "change", listing, realm, tip: term(:change) %></th>
-          <th scope="col" class="number col-medium"><%= sort_link "For sale", "quantity", listing, realm, tip: term(:for_sale) %></th>
-          <th scope="col" class="number col-wide"><%= sort_link "Sold, 24h", "sold", listing, realm, tip: term(:sold) %></th>
-          <th scope="col" class="number col-wide"><%= sort_link "Value, 24h", "value", listing, realm, tip: term(:value) %></th>
+          <%= sort_header "Median", "price", listing, realm, tip: term(:median), css_class: "number" %>
+          <%= sort_header "Minimum", "min", listing, realm, tip: term(:minimum), css_class: "number col-medium" %>
+          <%= sort_header "24h", "change", listing, realm, tip: term(:change), css_class: "number" %>
+          <%= sort_header "For sale", "quantity", listing, realm, tip: term(:for_sale), css_class: "number col-medium" %>
+          <%= sort_header "Sold, 24h", "sold", listing, realm, tip: term(:sold), css_class: "number col-wide" %>
+          <%= sort_header "Value, 24h", "value", listing, realm, tip: term(:value), css_class: "number col-wide" %>
         </tr>
       </thead>
       <tbody>

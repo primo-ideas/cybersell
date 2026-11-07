@@ -2118,9 +2118,11 @@ tr:hover .product-link {
     overflow-x: auto;
   }
 
+  /* The target form goes under the rest rather than past the edge of a phone. */
   .product-head-side {
     flex: 1 1 100%;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
   }

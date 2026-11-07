@@ -229,6 +229,16 @@ class PagesTest < ActionDispatch::IntegrationTest
     assert_select "a.is-sorted[href*=?]", "dir=desc"
   end
 
+  test "the header of the sorted column says how, for screen readers" do
+    seed_item
+
+    get home, params: { sort: "price", dir: "asc" }
+
+    assert_select "th[aria-sort]", 1
+    assert_select "th.number[aria-sort=ascending] a.is-sorted", /Median/
+    assert_select "a[aria-sort]", false
+  end
+
   test "a filter without a match says so and offers to clear" do
     seed_item
 
@@ -625,10 +635,10 @@ class PagesTest < ActionDispatch::IntegrationTest
     assert_select ".money[aria-label=?]", "20g"
     assert_select ".money[aria-label=?]", "9g"
     assert_select ".deal-discount", "50%"
-    assert_select "th a.is-sorted", /Resale profit/
+    assert_select "th[aria-sort=descending] a.is-sorted", /Resale profit/
 
     get deals_page, params: { sort: "discount" }
-    assert_select "th a.is-sorted", /Below usual/
+    assert_select "th[aria-sort=descending] a.is-sorted", /Below usual/
   end
 
   test "deals take in the goods of the region" do
@@ -911,6 +921,23 @@ class PagesTest < ActionDispatch::IntegrationTest
     assert_select ".across-markets a.product-link[href=?]", item_page(2589, hyjal), "Hyjal"
     assert_select ".across-markets tr.is-current", /Archimonde/
     assert_select ".across-markets tr.is-current .connected[data-tip=?]", "Shares its auction house with Naxxramas.", "+ 1"
+    assert_select ".across-markets p", /On Archimonde, it is the 2nd cheapest\s+of the 2 auction houses selling it/
+  end
+
+  test "an item page keeps the reader's realm in the comparison when it is not among the cheapest" do
+    seed_item
+    ProductAcrossMarkets::LIMIT.times do |index|
+      market = create_market(connected_realm_id: 2_000 + index, name: "Cheaper #{index}")
+      create_realm(market, name: "Cheaper #{index}")
+      create_snapshot(market, NOW)
+      create_price(market, 2589, NOW, min: 100 + index)
+    end
+
+    get item_page(2589)
+
+    assert_select ".across-markets tbody tr", ProductAcrossMarkets::LIMIT + 1
+    assert_select ".across-markets tbody tr:last-child.is-current", /Archimonde\s.*your realm, 13th/m
+    assert_select ".across-markets p", /the 13th cheapest\s+of the 13 auction houses/
   end
 
   test "an item page has no comparison on a single market" do
