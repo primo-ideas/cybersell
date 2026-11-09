@@ -203,11 +203,10 @@ All of it multiplies by the number of markets followed, which by default is ever
 
 ## Known limits
 
-- The real format of responses has only been confirmed on `eu/commodities` and `eu/hyjal`, not on the other regions.
-- `deploy/install.sh` has not been run on a real Linux server yet.
+- `deploy/install.sh` has only run on a server that already had Apache: installing Caddy has not been tried.
 - Individual auctions are only kept until the next snapshot, so the history cannot be recomputed with other statistics.
 - The variants of a piece of gear show as their bonus list, which does not mean much to a player.
 - Item `modifiers` are not part of `variant`.
 - Neither China, which uses other servers, nor WoW Classic.
 - The market pages are public as soon as the site is given a domain; `run.ps1` only exposes them on `127.0.0.1`. Times are shown in Paris time without an account.
-- Signing in with Battle.net has only been tested against a stand-in, not the real service.
+- Alerts by email have only been tried with emails written to a file, not through an SMTP server.

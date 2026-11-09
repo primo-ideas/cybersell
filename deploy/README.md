@@ -2,7 +2,7 @@
 
 For a small Ubuntu 26.04 server, for example a Scaleway instance. A single script installs everything: Postgres, the fetcher and its timer, the site, and Caddy for HTTPS if you give it a domain.
 
-> **Not tested on a real server yet.** The site has run in production mode and the fetcher on the real API, but on Windows. `install.sh` and the systemd units have never been run on Linux, for lack of access during development. It is written to be safely run again: if it fails, fix the cause and run it again.
+> **Run on one server so far,** under Ubuntu 26.04 with Apache already in front. Installing Caddy, on a server without Apache, has not been tried, nor have alerts through an SMTP server. The script is written to be safely run again: if it fails, fix the cause and run it again.
 
 ## Install
 
@@ -52,7 +52,7 @@ To make it public, point the domain's DNS to the server, open ports 80 and 443 i
 sudo DOMAIN=trading.example.com ./deploy/install.sh
 ```
 
-The site has no authentication: once public, anyone can read it. It cannot change the database, as its Postgres role only has read access.
+Once public, anyone can read the market pages: accounts are optional, and only hold what players save. The site cannot change the market data, as its Postgres role only has read access to it.
 
 ### Next to other sites
 
