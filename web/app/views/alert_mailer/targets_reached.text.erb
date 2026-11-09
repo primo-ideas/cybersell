@@ -1,0 +1,10 @@
+<%= @rows.one? ? "A product you follow is" : "#{@rows.size} products you follow are" %> at or below your target price on <%= @realm.name %>:
+<% @rows.each do |row| %>
+- <%= row.display_name %>: <%= money_text(row.min_price) %> (your target: <%= money_text(@watchlist.target_for(row.item_id, row.series)) %>)
+  <%= realm_item_url(@realm.region, @realm.slug, row.item_id, variant: row.variant_param) %>
+<% end %>
+
+Listings change with every snapshot: the cheapest may be gone by the time you log in. You will hear about a product again once it has gone back above your target and come down to it again.
+
+Your lists: <%= watchlist_url %>
+Stop these emails: <%= @unsubscribe_url %>

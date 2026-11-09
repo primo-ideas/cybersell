@@ -67,7 +67,10 @@ $Web = Join-Path $Repo 'web'
 $PgPort = 54329
 $PgUser = 'wowtrading'
 $Database = 'wow_trading'
+$AccountsDatabase = 'wow_trading_accounts'
 $BuildJobs = 4
+# How often to look for products that reached their target price, once running.
+$AlertsEveryMinutes = 10
 
 # The Ruby checksum comes from the winget manifest. EDB publishes none for this
 # archive: this one was recorded on the first download.
@@ -258,6 +261,8 @@ function Start-Site {
     Remove-Item (Join-Path $Web 'tmp\pids\server.pid') -ErrorAction SilentlyContinue
 
     Write-Step "Starting the site on port $Port"
+    # For the links in emails.
+    $env:PORT = "$Port"
     $ruby = (Get-Command ruby.exe).Source
     Start-Process -FilePath $ruby -PassThru -NoNewWindow -WorkingDirectory $Web `
         -RedirectStandardOutput (Join-Path $Logs 'site.log') `
@@ -304,7 +309,9 @@ function Invoke-Tests {
     Write-Step 'Testing the site'
     Install-WebDependencies
     New-DatabaseIfMissing 'wow_trading_site_test'
+    New-DatabaseIfMissing 'wow_trading_accounts_test'
     $env:DATABASE_URL = Get-DatabaseUrl 'wow_trading_site_test'
+    $env:ACCOUNTS_DATABASE_URL = Get-DatabaseUrl 'wow_trading_accounts_test'
     Push-Location $Web
     try {
         Invoke-Checked 'ruby' @('bin/rails', 'test')
@@ -330,6 +337,53 @@ function Get-ConfigArguments {
     throw 'Battle.net credentials are needed: pass -Config <file> (see .env.example), or -Stub to use sample data.'
 }
 
+# What players save has its own database, which the fetcher never touches. Sample data
+# gets its own here as well: a real account must not end up holding fake products.
+function Initialize-AccountsDatabase([string] $Name, [string] $MarketUrl) {
+    New-DatabaseIfMissing $Name
+    $env:PGPASSWORD = Get-Content -Raw $PgPasswordFile
+    try {
+        # Market snapshots can be fetched again after a crash, but not what players saved.
+        Invoke-Checked 'psql' @('-h', '127.0.0.1', '-p', "$PgPort", '-U', $PgUser, '-d', $Name, '-qc', "ALTER DATABASE $Name SET synchronous_commit = on")
+    }
+    finally {
+        Remove-Item Env:PGPASSWORD
+    }
+
+    $env:ACCOUNTS_DATABASE_URL = Get-DatabaseUrl $Name
+    $marketUrlBefore = $env:DATABASE_URL
+    $env:DATABASE_URL = $MarketUrl
+    Push-Location $Web
+    try {
+        Invoke-Checked 'ruby' @('bin/rails', 'db:migrate')
+    }
+    finally {
+        Pop-Location
+        $env:DATABASE_URL = $marketUrlBefore
+    }
+}
+
+# Signing in with Battle.net uses the fetcher's client: its credentials go to the site too.
+function Set-SiteCredentials {
+    $file = $Config ? $Config : (Join-Path $Repo '.env')
+    if ($Stub -or -not (Test-Path -PathType Leaf $file)) { return }
+
+    foreach ($line in Get-Content $file) {
+        if ($line -match '^\s*(BLIZZARD_CLIENT_ID|BLIZZARD_CLIENT_SECRET)\s*=\s*(.*?)\s*$') {
+            Set-Item "Env:$($Matches[1])" $Matches[2]
+        }
+    }
+}
+
+# Without waiting for it, so that Ctrl-C keeps working. Emails land in web\tmp\mails.
+function Start-Alerts {
+    $ruby = (Get-Command ruby.exe).Source
+    Start-Process -FilePath $ruby -PassThru -NoNewWindow -WorkingDirectory $Web `
+        -RedirectStandardOutput (Join-Path $Logs 'alerts.log') `
+        -RedirectStandardError (Join-Path $Logs 'alerts-error.log') `
+        -ArgumentList @('bin/rails', 'alerts:deliver')
+}
+
 function Write-DiskWarning {
     $drive = [IO.DriveInfo]::new($Home_)
     $freeGb = [math]::Round($drive.AvailableFreeSpace / 1GB)
@@ -340,6 +394,7 @@ function Write-DiskWarning {
 
 $site = $null
 $watcher = $null
+$alerts = $null
 $startedPostgres = $false
 
 try {
@@ -391,6 +446,11 @@ try {
         default { throw "The fetch failed with exit code $LASTEXITCODE, see above." }
     }
 
+    Initialize-AccountsDatabase ($Stub ? "${AccountsDatabase}_stub" : $AccountsDatabase) $siteDatabaseUrl
+    Set-SiteCredentials
+    # No Battle.net needed to try accounts on sample data: see SessionsController.
+    if ($Stub) { $env:WOW_TRADING_STUB_SIGN_IN = '1' }
+
     $env:DATABASE_URL = $siteDatabaseUrl
     $site = Start-Site
     Wait-Site $site
@@ -406,19 +466,28 @@ try {
         -RedirectStandardError (Join-Path $Logs 'fetcher-error.log') `
         -ArgumentList ($fetcherArguments + 'watch')
 
+    # From here on, what starts is for the site: the fetcher has what it needs.
+    $env:DATABASE_URL = $siteDatabaseUrl
+
     Write-Step "Site: $url"
     Write-Step "Still fetching in the background, logs in $Logs. Ctrl-C to stop everything."
     $watcherReported = $false
+    $nextAlerts = (Get-Date).AddMinutes($AlertsEveryMinutes)
     while (-not $site.HasExited) {
         if ($watcher.HasExited -and -not $watcherReported) {
             Write-Warning "Fetching stopped, see $Logs. The site stays up."
             $watcherReported = $true
+        }
+        if ((Get-Date) -ge $nextAlerts -and (-not $alerts -or $alerts.HasExited)) {
+            $alerts = Start-Alerts
+            $nextAlerts = (Get-Date).AddMinutes($AlertsEveryMinutes)
         }
         Start-Sleep -Seconds 1
     }
     throw "The site stopped, see $Logs"
 }
 finally {
+    Stop-IfRunning $alerts
     Stop-IfRunning $watcher
     Stop-IfRunning $site
     if ($startedPostgres) {

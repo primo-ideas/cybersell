@@ -1,0 +1,32 @@
+<% content_for :title, "Sign in" %>
+
+<section class="hero sign-in">
+  <h1>Sign in</h1>
+  <p class="lead">With your Battle.net account: WoW Trading never sees your password, and only learns your BattleTag and the names of your characters.</p>
+
+  <ul class="perks">
+    <li><strong>Your lists, everywhere.</strong> What you follow and your target prices, on every device, in as many lists as you like, with a note on each product.</li>
+    <li><strong>A trading journal.</strong> Write down what you buy and sell: it works out what you still hold, what it cost you and what you made.</li>
+    <li><strong>An email when a price comes down</strong> to the one you would buy at.</li>
+    <li><strong>The site your way.</strong> Your time zone, your realms at hand, the chart period, the sort and the size of deals you care about.</li>
+  </ul>
+
+  <div class="sign-in-actions">
+    <% if @battlenet %>
+      <%= button_to "Sign in with Battle.net", auth_battlenet_path, params: { return_to: @return_to }.compact,
+            class: "button button-primary", data: { turbo: false } %>
+    <% end %>
+    <% if @stub %>
+      <%= button_to "Sign in as a test player", auth_stub_path, params: { return_to: @return_to }.compact,
+            class: "button", data: { turbo: false } %>
+    <% end %>
+  </div>
+
+  <% if !@battlenet && !@stub %>
+    <p class="note">Signing in is not set up on this site yet: it needs the Battle.net client of the fetcher. See the README.</p>
+  <% elsif !@battlenet %>
+    <p class="note">Battle.net is not set up here: the test player only exists on this computer, with the sample data.</p>
+  <% end %>
+
+  <p class="note">Without an account, the site works all the same: your watchlist then stays in this browser. Signing in moves it to your account.</p>
+</section>

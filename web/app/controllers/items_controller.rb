@@ -7,13 +7,20 @@ class ItemsController < ApplicationController
     @variants = variants_on_sale
     @variant = params[:variant]&.to_s&.delete("\0") || @variants.first&.variant.to_s
     @product = Product.new(@item, @variant)
-    @history = ItemHistory.new(@market, @item, variant: @variant, period: params[:period])
+    @history = ItemHistory.new(@market, @item, variant: @variant, period: params[:period].presence || current_user&.chart_period)
 
     respond_to do |format|
       format.html do
         @listed = ListedProduct.find_by(auction_house_id: @market.id, item_id: @item.id, series: @product.series)
         @across_markets = ProductAcrossMarkets.new(@market, @item.id, @product.series, realm: current_realm)
         @rhythm = SalesRhythm.new(@market, @item.id, @product.series, @history.latest_taken_at)
+        if signed_in?
+          @saved = watchlist.entry(@item.id, @product.series)
+          @lists = current_user.lists.to_a
+          trades = current_user.trades.where(item_id: @item.id, series: @product.series).order(traded_at: :desc, id: :desc).to_a
+          @position = TradeLedger.new(trades).position_of(@item.id, @product.series)
+          @recent_trades = trades.first(5)
+        end
       end
       format.csv do
         send_data @history.to_csv, type: "text/csv",

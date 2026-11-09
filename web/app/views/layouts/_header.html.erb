@@ -14,10 +14,20 @@
     <% end %>
   <% end %>
 
-  <%= link_to watchlist_path, class: "header-link" do %>
-    ★ Watchlist<% unless watchlist.empty? %> <small><%= watchlist.size %></small><% end %>
-    <% if watchlist_hits.positive? %>
-      <small class="watch-hits" data-tip="<%= pluralize(watchlist_hits, "product") %> at or below your target price on <%= current_realm.name %>"><%= watchlist_hits %> at target</small>
+  <nav class="header-nav" aria-label="Yours">
+    <%= link_to watchlist_path, class: "header-link" do %>
+      ★ Watchlist<% unless watchlist.empty? %> <small><%= watchlist.size %></small><% end %>
+      <% if watchlist_hits.positive? %>
+        <small class="watch-hits" data-tip="<%= pluralize(watchlist_hits, "product") %> at or below your target price on <%= current_realm.name %>"><%= watchlist_hits %> at target</small>
+      <% end %>
     <% end %>
-  <% end %>
+    <% if signed_in? %>
+      <%= link_to "Journal", trades_path, class: "header-link" %>
+      <%= link_to current_user.battletag.split("#").first, account_path, class: "header-link header-account",
+            data: { tip: "Your account: preferences, alerts, characters" } %>
+    <% else %>
+      <%= link_to "Sign in", sign_in_path(return_to: (request.fullpath if request.get? && controller_name != "sessions")),
+            class: "header-link header-sign-in" %>
+    <% end %>
+  </nav>
 </header>

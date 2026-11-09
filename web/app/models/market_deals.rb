@@ -15,7 +15,6 @@ class MarketDeals
     AND #{PROFIT} >= :min_profit
     AND #{PROFIT} >= listed.min_price * :min_margin
   SQL
-  BINDS = { min_points: ListedProduct::MIN_USUAL_POINTS, min_profit: MIN_PROFIT, min_margin: MIN_MARGIN }.freeze
   SORTS = {
     "profit" => "#{PROFIT} DESC",
     "discount" => "listed.min_price::float8 / listed.usual_min_price ASC",
@@ -23,22 +22,27 @@ class MarketDeals
   }.freeze
   DEFAULT_SORT = "profit"
 
-  attr_reader :sort
+  attr_reader :sort, :min_margin, :min_profit
 
-  def initialize(markets, sort: nil)
+  # A player can ask for bigger or smaller deals than these from their account.
+  def initialize(markets, sort: nil, min_margin: MIN_MARGIN, min_profit: MIN_PROFIT)
     @ids = Array(markets).map(&:id)
     @query = MarketQuery.new(markets)
     @sort = SORTS.key?(sort) ? sort : DEFAULT_SORT
+    @min_margin = min_margin
+    @min_profit = min_profit
   end
+
+  def default_thresholds? = min_margin == MIN_MARGIN && min_profit == MIN_PROFIT
 
   def latest_taken_at = @query.latest_taken_at
 
   def rows
-    @rows ||= @query.products(where: CONDITIONS, binds: BINDS, order: SORTS.fetch(sort), limit: LIMIT)
+    @rows ||= @query.products(where: CONDITIONS, binds: binds, order: SORTS.fetch(sort), limit: LIMIT)
   end
 
   def total
-    @total ||= @query.count(where: CONDITIONS, binds: BINDS)
+    @total ||= @query.count(where: CONDITIONS, binds: binds)
   end
 
   # Whether any product has enough history for this list to mean something.
@@ -56,4 +60,8 @@ class MarketDeals
     Snapshot.where(auction_house_id: @ids, taken_at: (latest_taken_at - 3.days)..)
       .group(:auction_house_id).count.values.max.to_i
   end
+
+  private
+
+  def binds = { min_points: ListedProduct::MIN_USUAL_POINTS, min_profit: min_profit, min_margin: min_margin }
 end

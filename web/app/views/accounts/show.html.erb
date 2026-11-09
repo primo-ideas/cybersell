@@ -1,0 +1,169 @@
+<% content_for :title, "Your account" %>
+
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Your account</p>
+    <h1><%= @user.battletag %></h1>
+    <p class="muted">Since <%= l(@user.created_at.to_date, format: "%B %-d, %Y") %>, signed in with Battle.net.</p>
+  </div>
+  <%= button_to "Sign out", sign_out_path, method: :delete, class: "button", form: { data: { turbo: false } } %>
+</div>
+
+<nav class="tabs account-tabs" aria-label="Sections">
+  <a href="#realms">Realms</a>
+  <a href="#preferences">Preferences</a>
+  <% if TargetAlerts.available? %><a href="#alerts">Alerts</a><% end %>
+  <a href="#sessions">Browsers</a>
+  <a href="#data">Your data</a>
+</nav>
+
+<div class="account-grid">
+  <section class="account-card" id="realms" aria-labelledby="realms-title">
+    <h2 id="realms-title">Your realms</h2>
+    <p class="muted">Favourites come first in the realm picker, with the realms of your characters. Add one with the ☆ next to a realm's name.</p>
+    <% if @favorites.any? %>
+      <ul class="account-list">
+        <% @favorites.each do |realm| %>
+          <li>
+            <%= link_to realm_home_path(realm) do %><%= realm_label(realm) %><% end %>
+            <%= button_to "Remove", favorite_realm_path, method: :patch, params: { region: realm.region, slug: realm.slug },
+                  class: "link-button", form: { data: { turbo: false } } %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="muted">No favourite realm yet.</p>
+    <% end %>
+
+    <h3>Your characters</h3>
+    <% if @user.characters.any? %>
+      <ul class="account-list characters">
+        <% @user.characters.each do |character| %>
+          <% realm = Realm.find_by_route(character.region, character.realm_slug) %>
+          <li>
+            <span>
+              <strong><%= character.name %></strong>
+              <small class="muted"><%= [ ("level #{character.level}" if character.level), character.character_class, character.faction ].compact.join(" · ") %></small>
+            </span>
+            <% if realm %>
+              <%= link_to realm_home_path(realm) do %><%= realm_label(realm) %><% end %>
+            <% else %>
+              <span class="muted" data-tip="This site does not follow this realm."><%= character.region.upcase %> <%= character.realm_name %></span>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+      <p class="muted">As Battle.net listed them when you last signed in.</p>
+    <% else %>
+      <p class="muted">Battle.net listed no World of Warcraft character, in the regions this site follows, when you last signed in.</p>
+    <% end %>
+  </section>
+
+  <section class="account-card" id="preferences" aria-labelledby="preferences-title">
+    <h2 id="preferences-title">Preferences</h2>
+    <%= form_with model: @user, url: account_path, method: :patch, class: "account-form", data: { turbo: false } do |form| %>
+      <%= hidden_field_tag :section, "preferences", id: nil %>
+      <div class="field">
+        <%= form.label :time_zone, "Time zone" %>
+        <%= form.time_zone_select :time_zone, AccountsHelper::PRIORITY_ZONES, {}, id: "user-time-zone" %>
+        <small class="muted">Times, charts and “when it sells” follow it. Now: <%= l(Time.current, format: "%H:%M") %>.</small>
+      </div>
+      <div class="field">
+        <%= form.label :chart_period, "Charts open on" %>
+        <%= form.select :chart_period, AccountsHelper::PERIOD_LABELS.invert, {}, id: "user-chart-period" %>
+      </div>
+      <div class="field-pair">
+        <div class="field">
+          <%= form.label :listing_sort, "Sort what is for sale by" %>
+          <%= form.select :listing_sort, AccountsHelper::SORT_LABELS.invert, {}, id: "user-listing-sort" %>
+        </div>
+        <div class="field">
+          <%= form.label :listing_dir, "Order" %>
+          <%= form.select :listing_dir, [ [ "Usual for it", "" ], [ "Highest first", "desc" ], [ "Lowest first", "asc" ] ], {}, id: "user-listing-dir" %>
+        </div>
+      </div>
+      <fieldset class="field-pair">
+        <legend>Deals worth showing</legend>
+        <div class="field">
+          <%= form.label :deal_min_margin, "Resale profit, as a share of the price" %>
+          <span class="input-suffix">
+            <%= form.number_field :deal_min_margin, min: 0, max: 95, step: 1, id: "user-deal-min-margin" %> %
+          </span>
+        </div>
+        <div class="field">
+          <%= form.label :deal_min_profit, "And at least" %>
+          <%= form.text_field :deal_min_profit, value: (@user.deal_min_profit.zero? ? "0" : money_text(@user.deal_min_profit)),
+                id: "user-deal-min-profit", placeholder: "1g", autocomplete: "off", spellcheck: false %>
+        </div>
+      </fieldset>
+      <%= form.submit "Save preferences", class: "button button-primary" %>
+    <% end %>
+  </section>
+
+  <% if TargetAlerts.available? %>
+    <section class="account-card" id="alerts" aria-labelledby="alerts-title">
+      <h2 id="alerts-title">Alerts by email</h2>
+      <p class="muted">An email when a product you follow comes down to its target price on <%= @user.realm&.name || "your realm" %>, checked after every snapshot. One per product, until it goes back above.</p>
+
+      <%= form_with url: email_account_path, method: :patch, class: "inline-form", data: { turbo: false } do |form| %>
+        <%= form.label :email, "Email address", for: "account-email" %>
+        <%= form.email_field :email, value: @user.email, id: "account-email", autocomplete: "email", placeholder: "you@example.com" %>
+        <%= form.submit (@user.email ? "Change" : "Save"), class: "button" %>
+      <% end %>
+
+      <% if @user.email && !@user.email_confirmed? %>
+        <div class="status status-waiting">Waiting for you to confirm <%= @user.email %>, from the link sent there.
+          <%= button_to "Send it again", email_confirmation_account_path, class: "link-button", form: { data: { turbo: false } } %></div>
+      <% elsif @user.email_confirmed? %>
+        <p class="status status-ok">Confirmed.</p>
+        <%= form_with model: @user, url: account_path, method: :patch, class: "inline-form", data: { turbo: false } do |form| %>
+          <%= hidden_field_tag :section, "alerts", id: nil %>
+          <%= form.hidden_field :alerts_enabled, value: !@user.alerts_enabled, id: nil %>
+          <span><%= @user.alerts_enabled ? "Alerts are on." : "Alerts are off." %></span>
+          <%= form.submit (@user.alerts_enabled ? "Turn them off" : "Turn them on"), class: "button" %>
+        <% end %>
+      <% end %>
+      <% if @user.realm.nil? %>
+        <p class="muted">Open a realm first: alerts follow the realm you visited last.</p>
+      <% end %>
+    </section>
+  <% end %>
+
+  <section class="account-card" id="sessions" aria-labelledby="sessions-title">
+    <h2 id="sessions-title">Browsers signed in</h2>
+    <ul class="account-list">
+      <% @sessions.each do |session_record| %>
+        <li>
+          <span>
+            <strong><%= browser_label(session_record.user_agent) %></strong>
+            <small class="muted">since <%= l(session_record.created_at, format: "%b %-d, %Y") %>, last seen <%= time_ago_in_words(session_record.updated_at) %> ago</small>
+          </span>
+          <% if session_record == Current.session %>
+            <small class="pill">This one</small>
+          <% else %>
+            <%= button_to "Sign out", session_account_path(session_record), method: :delete, class: "link-button", form: { data: { turbo: false } } %>
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+    <% if @sessions.size > 1 %>
+      <%= button_to "Sign out every other browser", other_sessions_account_path, method: :delete, class: "button", form: { data: { turbo: false } } %>
+    <% end %>
+  </section>
+
+  <section class="account-card" id="data" aria-labelledby="data-title">
+    <h2 id="data-title">Your data</h2>
+    <p class="muted">Your lists, journal, preferences and characters, in one file.</p>
+    <p><%= link_to "Download a copy (JSON)", export_account_path(format: :json), class: "button", data: { turbo: false } %></p>
+
+    <h3 id="delete">Delete your account</h3>
+    <p class="muted">Everything in it goes at once, for good: lists, journal, preferences, and every browser signed in. Your Battle.net account is not touched.</p>
+    <%= form_with url: account_path, method: :delete, class: "delete-form", data: { turbo: false } do |form| %>
+      <label class="check">
+        <%= check_box_tag :confirm, "1", false, id: "confirm-delete" %>
+        I understand that this cannot be undone.
+      </label>
+      <%= form.submit "Delete my account", class: "button button-danger" %>
+    <% end %>
+  </section>
+</div>

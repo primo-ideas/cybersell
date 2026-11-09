@@ -3,7 +3,7 @@
 Price curves and estimated sales for the World of Warcraft auction house.
 
 - [`fetcher/`](fetcher/): collects auctions from the Battle.net API and stores statistics in Postgres (Rust).
-- [`web/`](web/): the site, which reads that database and never writes to it (Rails).
+- [`web/`](web/): the site, which reads that database and never writes to it, and keeps players' accounts in a database of its own (Rails).
 - [`deploy/`](deploy/): installation on an Ubuntu server, see [its guide](deploy/README.md).
 
 ## Try it without credentials
@@ -16,7 +16,7 @@ On Windows, with [PowerShell 7.2 or later](https://github.com/PowerShell/PowerSh
 
 On first use, the script installs Postgres and Ruby in `%LOCALAPPDATA%\wow-trading`, without admin rights, without touching the `PATH` and without creating a service. It then simulates a week of auctions, starts the site on <http://127.0.0.1:3000> and opens the browser. Ctrl-C stops everything it started.
 
-`-Stub` writes to a separate database, `wow_trading_stub`: fake data cannot mix with the real history.
+`-Stub` writes to a separate database, `wow_trading_stub`: fake data cannot mix with the real history. It also offers to sign in as a test player, without Battle.net.
 
 ## Connect Battle.net
 
@@ -56,7 +56,10 @@ cargo run -p wow-trading-fetcher -- --stub once
 
 cd web
 bundle install
-DATABASE_URL=postgres://user:password@localhost:5432/wow_trading_stub bin/rails server
+export DATABASE_URL=postgres://user:password@localhost:5432/wow_trading_stub
+export ACCOUNTS_DATABASE_URL=postgres://user:password@localhost:5432/wow_trading_accounts
+bin/rails db:prepare
+bin/rails server
 ```
 
 The fetcher creates the database if it does not exist and applies its own migrations.
@@ -162,7 +165,8 @@ A player picks their realm, then searches for an item. Markets never show: each 
 - `/:region/:realm/deals`: what sells well below its usual price, with what is left after reselling at that price. See [Deals](#deals).
 - `/:region/:realm/items/:id`: price curves, estimated sales and quantity for sale, over 24 hours, 7, 30 or 90 days, or the whole history. Each chart has its data table. The page also gives the usual cheapest price, when the product sells by hour of the day and day of the week over the last two weeks, the same product on the cheapest realms of the region along with where the reader's own ranks, and a CSV download of the prices (`.csv`, in copper and UTC).
 - `/:region/:realm/search`: searches the realm. The header of each page offers suggestions as you type, with `/` or Ctrl-K to get there.
-- `/watchlist`: the products a reader follows, at their latest prices on their realm, each with a target price if they set one, typed as the game writes amounts (`12g 50s`), as gold (`12.5`) or in thousands of gold (`1.5k`). Once the cheapest listing reaches it, the row and the header of every page say so. It lives in a cookie: the site has no accounts, and never writes to its database.
+- `/watchlist`: the products a reader follows, at their latest prices on their realm, each with a target price if they set one, typed as the game writes amounts (`12g 50s`), as gold (`12.5`) or in thousands of gold (`1.5k`). Once the cheapest listing reaches it, the row and the header of every page say so. Without an account it lives in a cookie.
+- `/sign-in`, `/account`, `/journal`: see [Accounts](#accounts).
 
 Hovering a product shows its card: what it is, and its prices on the realm. The products a reader opened last show under the search box of a realm's page, and in the suggestions before anything is typed; that list stays in their browser. Hovering the label of a figure says what it means. The addresses of the time the site was organised by market (`/markets/:id`, `/search`) lead to the same pages on the player's realm.
 
@@ -172,7 +176,21 @@ A deal is measured on the cheapest listing, compared to the median of its cheape
 
 A product shows up with at least 24 snapshots of history, a margin of 20% and a profit of 1 gold after the auction house's 5% cut. Gear in several variants is left out, as a low item level is not a bargain. These thresholds have not been checked against real data yet, as no market had a day of history when they were written.
 
-The schema belongs to the fetcher: the site has no migrations, and outside tests Postgres refuses its writes (`default_transaction_read_only`). Its tests load the fetcher's migrations, so a schema change that breaks the site makes them fail. They wipe their database and refuse to run on a database whose name does not end in `_test`.
+The schema of the market data belongs to the fetcher: the site has no migrations for it, and outside tests Postgres refuses its writes (`default_transaction_read_only`). Its tests load the fetcher's migrations, so a schema change that breaks the site makes them fail. They wipe their databases and refuse to run on a database whose name does not end in `_test`.
+
+### Accounts
+
+An account is optional: everything above works without one. Players sign in with Battle.net, so the site stores no password, only their BattleTag and the names of their characters. Signing in moves what the browser followed into the account. It gives them:
+
+- **Lists.** What they follow is on every device, in as many named lists as they like, each product with its target price and a note. A product is in one list: the star adds it to the first, and its page moves it to another.
+- **A journal** (`/journal`). They write down what they buy and sell from a product's page. It works out what they hold and what it cost on average, what they made after the auction house's cut, and what selling now would bring at the cheapest listing. Units sold with no purchase written down have no known cost, so they do not count as profit.
+- **Alerts by email.** Once they have confirmed an address, one email per run lists the products that just came down to their target on the realm they visited last. A product says so once, then again only after going back above its target. Every email has a link to stop them.
+- **Preferences** (`/account`). Their time zone, the period charts open on, how the listing is sorted, and the thresholds of [deals](#deals).
+- **Their realms.** The last one visited follows them, and those they marked with a star and those of their characters top the realm picker.
+
+From `/account`, they can sign out other browsers, download everything as JSON, or delete it all.
+
+All of this is in its own database (`ACCOUNTS_DATABASE_URL`, migrations in [`web/db/accounts_migrate`](web/db/accounts_migrate)), the only one the site writes to. Signing in needs the site's callback, `/auth/battlenet/callback`, in the **Redirect URLs** of the Battle.net client. Locally, register `http://localhost:3000/auth/battlenet/callback` and open the site at `localhost`. Emails land in `web/tmp/mails` unless `SMTP_ADDRESS` is set; in production, see [the deployment guide](deploy/README.md#accounts).
 
 ## Volume
 
@@ -191,4 +209,5 @@ All of it multiplies by the number of markets followed, which by default is ever
 - The variants of a piece of gear show as their bonus list, which does not mean much to a player.
 - Item `modifiers` are not part of `variant`.
 - Neither China, which uses other servers, nor WoW Classic.
-- The site has no authentication. `run.ps1` only exposes it on `127.0.0.1`; online, it is public as soon as it is given a domain. Times are shown in Paris time.
+- The market pages are public as soon as the site is given a domain; `run.ps1` only exposes them on `127.0.0.1`. Times are shown in Paris time without an account.
+- Signing in with Battle.net has only been tested against a stand-in, not the real service.

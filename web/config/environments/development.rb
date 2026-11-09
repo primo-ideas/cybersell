@@ -28,6 +28,10 @@ Rails.application.configure do
   # Change to :null_store to avoid any caching.
   config.cache_store = :memory_store
 
+  # Without an SMTP server, emails land in tmp/mails, to read them there.
+  config.action_mailer.delivery_method = :file unless ENV["SMTP_ADDRESS"].present?
+  config.action_mailer.file_settings = { location: Rails.root.join("tmp/mails") }
+
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
 

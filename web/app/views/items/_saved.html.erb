@@ -1,0 +1,15 @@
+<%# Which list holds the product, and the player's note on it. Only once they follow it. %>
+<section class="saved-panel" aria-label="In your lists">
+  <%= form_with url: saved_product_path(saved), method: :patch, class: "saved-form", data: { turbo: false } do |form| %>
+    <div class="field">
+      <%= form.label :list_id, "In your list", for: "saved-list" %>
+      <%= form.select :list_id, options_from_collection_for_select(lists, :id, :name, saved.list_id), {}, id: "saved-list" %>
+    </div>
+    <div class="field field-grow">
+      <%= form.label :note, "Your note", for: "saved-note" %>
+      <%= form.text_field :note, value: saved.note, id: "saved-note", maxlength: 500,
+            placeholder: "Where to farm it, what it crafts, when to sell…" %>
+    </div>
+    <%= form.submit "Save", class: "button" %>
+  <% end %>
+</section>

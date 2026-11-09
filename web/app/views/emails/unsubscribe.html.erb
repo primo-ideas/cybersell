@@ -1,0 +1,12 @@
+<% content_for :title, "Stop alerts" %>
+
+<section class="hero sign-in">
+  <% if @user %>
+    <h1>Stop alerts by email?</h1>
+    <p class="lead">No more emails to <%= @user.email %> when a product reaches its target price. Your lists and targets stay as they are, and you can turn alerts back on from your account.</p>
+    <%= button_to "Stop the emails", unsubscribe_path, params: { token: @token }, class: "button button-primary", form: { data: { turbo: false } } %>
+  <% else %>
+    <h1>This link no longer works</h1>
+    <p class="lead">The address of that account changed since, or the account was deleted. Alerts can be turned off from your account.</p>
+  <% end %>
+</section>

@@ -1,7 +1,17 @@
 <div class="page-head">
   <div>
     <p class="eyebrow"><%= realm.region_name %></p>
-    <h1 class="realm-title"><%= realm.name %></h1>
+    <div class="realm-title-row">
+      <h1 class="realm-title"><%= realm.name %></h1>
+      <% if signed_in? %>
+        <% favorite = current_user.favorite?(realm) %>
+        <%= button_to (favorite ? "★" : "☆"), favorite_realm_path, method: :patch, params: { region: realm.region, slug: realm.slug },
+              class: [ "favorite-button", ("is-favorite" if favorite) ], form_class: "favorite-form", "aria-pressed": favorite,
+              "aria-label": (favorite ? "Remove from your favourite realms" : "Add to your favourite realms"),
+              data: { tip: favorite ? "One of your favourite realms" : "Add to your favourite realms, at the top of the realm picker" },
+              form: { data: { turbo: false } } %>
+      <% end %>
+    </div>
   </div>
   <%= freshness(realm.latest_taken_at) %>
 </div>

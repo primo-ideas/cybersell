@@ -1,17 +1,69 @@
-<% content_for :title, "Watchlist" %>
+<% content_for :title, @list ? "#{@list.name} · Watchlist" : "Watchlist" %>
 
 <h1>Watchlist</h1>
-<p class="lead">The products you follow, at their latest prices<%= " on #{current_realm.name}" if current_realm %>. This list lives in a cookie of this browser: there is no account, and it does not follow you to another device.</p>
+<% if signed_in? %>
+  <p class="lead">The products you follow, at their latest prices<%= " on #{current_realm.name}" if current_realm %>. They are kept in your account, on every device.</p>
+<% else %>
+  <p class="lead">
+    The products you follow, at their latest prices<%= " on #{current_realm.name}" if current_realm %>. This list lives in a cookie of this browser, and does not follow you to another device:
+    <%= link_to "sign in", sign_in_path(return_to: watchlist_path) %> to keep it in an account, with several lists, notes, and an email when a price comes down.
+  </p>
+<% end %>
 
-<% if watchlist.empty? %>
+<% if signed_in? %>
+  <nav class="tabs list-tabs" aria-label="Your lists">
+    <%= link_to watchlist_path, class: ("is-selected" unless @list), "aria-current": ("page" unless @list) do %>
+      All <small><%= watchlist.size %></small>
+    <% end %>
+    <% counts = current_user.saved_products.group(:list_id).count %>
+    <% @lists.each do |list| %>
+      <%= link_to watchlist_path(list: list.id), class: ("is-selected" if list == @list), "aria-current": ("page" if list == @list) do %>
+        <%= list.name %> <small><%= counts.fetch(list.id, 0) %></small>
+      <% end %>
+    <% end %>
+  </nav>
+
+  <details class="list-manage" <%= "open" if flash[:alert]&.start_with?("List not", "Not renamed") %>>
+    <summary><%= @list ? "Manage “#{@list.name}”" : "Manage your lists" %></summary>
+    <div class="list-manage-body">
+      <% if @lists.size < User::MAX_LISTS %>
+        <%= form_with url: lists_path, method: :post, class: "inline-form", data: { turbo: false } do |form| %>
+          <%= form.label :name, "New list", for: "new-list-name" %>
+          <%= form.text_field :name, id: "new-list-name", maxlength: 40, placeholder: "Farming, crafting, flips…", required: true %>
+          <%= form.submit "Create", class: "button" %>
+        <% end %>
+      <% end %>
+      <% if @list %>
+        <%= form_with url: list_path(@list), method: :patch, class: "inline-form", data: { turbo: false } do |form| %>
+          <%= form.label :name, "Name", for: "list-name" %>
+          <%= form.text_field :name, value: @list.name, id: "list-name", maxlength: 40, required: true %>
+          <%= form.submit "Rename", class: "button" %>
+        <% end %>
+        <div class="inline-form">
+          <%= button_to "Move left", list_path(@list), method: :patch, params: { move: "up" }, class: "button", form: { data: { turbo: false } },
+                disabled: @lists.first == @list %>
+          <%= button_to "Move right", list_path(@list), method: :patch, params: { move: "down" }, class: "button", form: { data: { turbo: false } },
+                disabled: @lists.last == @list %>
+          <% if @lists.size > 1 %>
+            <%= button_to "Delete this list", list_path(@list), method: :delete, class: "button button-danger",
+                  form: { data: { turbo_confirm: "Delete “#{@list.name}” and the products it holds?" } } %>
+          <% end %>
+        </div>
+        <p class="muted">The ☆ on a product adds it to <strong><%= @lists.first.name %></strong>, your first list. Move a product to another list from its page.</p>
+      <% end %>
+    </div>
+  </details>
+<% end %>
+
+<% if @shown.empty? %>
   <div class="empty-state">
-    <h2>Nothing here yet</h2>
-    <p>Open a product and press <strong>☆ Watch</strong> to find it here.</p>
+    <h2><%= @list ? "Nothing in “#{@list.name}” yet" : "Nothing here yet" %></h2>
+    <p>Open a product and press <strong>☆ Watch</strong> to find it here<%= ", then pick this list on its page" if @list %>.</p>
   </div>
 <% elsif current_realm.nil? %>
   <div class="empty-state">
     <h2>Which realm?</h2>
-    <p>Prices depend on the realm. <%= link_to "Choose yours", realms_path %> to see those of the <%= pluralize(watchlist.size, "product") %> you follow.</p>
+    <p>Prices depend on the realm. <%= link_to "Choose yours", realms_path %> to see those of the <%= pluralize(@shown.size, "product") %> you follow.</p>
   </div>
 <% else %>
   <% if @at_target.any? %>
@@ -41,7 +93,8 @@
         </thead>
         <tbody>
           <% @products.each do |row| %>
-            <% hit = watchlist.at_target?(row) %>
+            <% hit = @shown.at_target?(row) %>
+            <% saved = @shown.entry(row.item_id, row.series) if @shown.account? %>
             <tr class="<%= "is-at-target" if hit %>">
               <td>
                 <div class="product-cell">
@@ -49,6 +102,8 @@
                   <span class="product-label">
                     <%= product_link row, current_realm %>
                     <% if hit %><small class="target-pill">At target</small><% end %>
+                    <% if saved && !@list && @lists.many? %><small class="muted"><%= @lists.find { |list| list.id == saved.list_id }&.name %></small><% end %>
+                    <% if saved&.note %><small class="saved-note" title="<%= saved.note %>"><%= saved.note.truncate(80) %></small><% end %>
                   </span>
                 </div>
               </td>
@@ -66,7 +121,7 @@
     </div>
   <% end %>
 
-  <% missing = watchlist.not_on_sale(current_realm.markets) %>
+  <% missing = @shown.not_on_sale(current_realm.markets) %>
   <% if missing.positive? %>
     <p class="note"><%= pluralize(missing, "product") %> you follow <%= missing == 1 ? "has" : "have" %> no listing on <%= current_realm.name %> right now, and will come back here once listed again.</p>
   <% end %>

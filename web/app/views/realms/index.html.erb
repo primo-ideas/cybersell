@@ -35,6 +35,22 @@
   <% end %>
 </section>
 
+<% if @own_realms.present? %>
+  <section class="own-realms" aria-labelledby="own-realms-title">
+    <h2 id="own-realms-title">Your realms</h2>
+    <ul class="own-realm-list">
+      <% @own_realms.each do |realm, favorite, characters| %>
+        <li>
+          <%= link_to (@item ? item_on_realm_path(realm, @item.id, variant: @variant) : realm_home_path(realm)), class: "own-realm" do %>
+            <span><%= realm_label(realm) %><% if favorite %> <span class="favorite-mark" title="Favourite">★</span><% end %></span>
+            <% if characters.any? %><small class="muted"><%= characters.map(&:name).first(4).to_sentence %></small><% end %>
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+  </section>
+<% end %>
+
 <% if @realms.empty? %>
   <div class="empty-state">
     <h2>No realms yet</h2>

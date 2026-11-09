@@ -1,0 +1,11 @@
+# How often to look for products that reached their target price: install.sh sets it to
+# just after each of the fetcher's cycles. Only enabled once an SMTP server is configured.
+[Unit]
+Description=WoW Trading: email target price alerts regularly
+
+[Timer]
+OnCalendar=*:2/5
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

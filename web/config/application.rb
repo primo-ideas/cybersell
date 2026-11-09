@@ -7,7 +7,7 @@ require "active_model/railtie"
 require "active_record/railtie"
 # require "active_storage/engine"
 require "action_controller/railtie"
-# require "action_mailer/railtie"
+require "action_mailer/railtie"
 # require "action_mailbox/engine"
 # require "action_text/engine"
 require "action_view/railtie"
@@ -38,5 +38,31 @@ module Web
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Tests build the accounts database from its migrations, as they do the market one
+    # from the fetcher's: there is no schema file to keep in step.
+    config.active_record.dump_schema_after_migration = false
+
+    # Emails say when a product reaches its target. Without an SMTP server, production
+    # sends none, and the account page does not offer them.
+    if ENV["SMTP_ADDRESS"].present?
+      config.action_mailer.delivery_method = :smtp
+      config.action_mailer.smtp_settings = {
+        address: ENV["SMTP_ADDRESS"],
+        port: ENV.fetch("SMTP_PORT", 587).to_i,
+        user_name: ENV["SMTP_USERNAME"].presence,
+        password: ENV["SMTP_PASSWORD"].presence,
+        enable_starttls_auto: true
+      }.compact
+    end
+    config.action_mailer.default_options = {
+      from: ENV["MAIL_FROM"].presence || "WoW Trading <alerts@#{ENV["SITE_HOST"].presence || "localhost"}>"
+    }
+    config.action_mailer.default_url_options = {
+      host: ENV["SITE_HOST"].presence || "127.0.0.1",
+      port: (ENV.fetch("PORT", 3000).to_i unless ENV["SITE_HOST"].present?),
+      protocol: ENV["SITE_HOST"].present? ? "https" : "http",
+      script_name: ENV["RAILS_RELATIVE_URL_ROOT"].presence
+    }.compact
   end
 end

@@ -30,6 +30,10 @@
   </div>
 </header>
 
+<% if @saved %>
+  <%= render "items/saved", saved: @saved, lists: @lists %>
+<% end %>
+
 <turbo-frame id="item-data" data-turbo-action="advance">
   <div class="controls-row">
     <nav class="segmented" aria-label="Period">
@@ -131,6 +135,13 @@
 </turbo-frame>
 
 <%= render "items/rhythm", rhythm: @rhythm %>
+
+<% if signed_in? %>
+  <%= render "items/journal", item: @item, series: @product.series, realm: current_realm, listed: @listed,
+        position: @position, recent_trades: @recent_trades %>
+<% else %>
+  <p class="note journal-teaser"><%= link_to "Sign in", sign_in_path(return_to: request.fullpath) %> to write down what you buy and sell of it, and see what it made you.</p>
+<% end %>
 
 <% if @across_markets.comparable? %>
   <%= render "items/across_markets", across_markets: @across_markets, item: @item, current_min: @listed&.min_price %>

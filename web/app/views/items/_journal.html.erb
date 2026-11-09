@@ -1,0 +1,63 @@
+<%# The player's trades of this product, and a form to write one down. %>
+<section class="journal-panel" id="journal" aria-labelledby="journal-title">
+  <div class="journal-head">
+    <h2 id="journal-title">Your trades</h2>
+    <%= link_to "Whole journal →", trades_path, class: "link-quiet" %>
+  </div>
+
+  <% if position %>
+    <dl class="journal-facts">
+      <div><dt>Held</dt><dd><%= number_with_delimiter(position.stock) %></dd></div>
+      <div><dt>Average cost</dt><dd><%= money(position.average_cost) %></dd></div>
+      <div>
+        <dt data-tip="What selling what you hold at the cheapest listing here would make, after the cut, less what it cost." tabindex="0">If sold now</dt>
+        <% unrealised = position.unrealised_at(listed&.min_price) %>
+        <dd><%= unrealised ? tag.span(signed_money(unrealised), class: profit_class(unrealised)) : "—" %></dd>
+      </div>
+      <div><dt>Profit made</dt><dd class="<%= profit_class(position.realised) %>"><%= signed_money(position.realised) %></dd></div>
+    </dl>
+    <ul class="trade-list">
+      <% recent_trades.each do |trade| %>
+        <li>
+          <span class="pill <%= trade.buy? ? "pill-buy" : "pill-sell" %>"><%= trade.buy? ? "Bought" : "Sold" %></span>
+          <%= number_with_delimiter(trade.quantity) %> × <%= money(trade.unit_price) %>
+          <small class="muted"><%= l(trade.traded_at, format: "%b %-d") %><%= " · #{trade.note}" if trade.note %></small>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <details class="trade-entry" <%= "open" unless position %>>
+    <summary>Write down a trade</summary>
+    <%= form_with url: trades_path, method: :post, class: "trade-form", data: { turbo: false } do |form| %>
+      <%= hidden_field_tag :item_id, item.id, id: nil %>
+      <%= hidden_field_tag :series, series, id: nil %>
+      <%= hidden_field_tag :region, realm.region, id: nil %>
+      <%= hidden_field_tag :realm, realm.slug, id: nil %>
+      <fieldset class="side-choice">
+        <legend class="visually-hidden">Bought or sold</legend>
+        <label><%= radio_button_tag :side, "buy", true, id: "trade-side-buy" %> Bought</label>
+        <label><%= radio_button_tag :side, "sell", false, id: "trade-side-sell" %> Sold</label>
+      </fieldset>
+      <div class="field">
+        <%= form.label :quantity, "Quantity", for: "trade-quantity" %>
+        <%= form.number_field :quantity, value: 1, min: 1, max: Trade::MAX_QUANTITY, step: 1, id: "trade-quantity", required: true %>
+      </div>
+      <div class="field">
+        <%= form.label :unit_price, "Unit price", for: "trade-unit-price" %>
+        <%= form.text_field :unit_price, id: "trade-unit-price", required: true, autocomplete: "off", spellcheck: false,
+              placeholder: listed ? money_text(listed.min_price) : "12g 50s", value: (money_text(listed.min_price) if listed) %>
+      </div>
+      <div class="field">
+        <%= form.label :traded_on, "Day", for: "trade-day" %>
+        <%= form.date_field :traded_on, value: Date.current, max: Date.current, id: "trade-day" %>
+      </div>
+      <div class="field field-grow">
+        <%= form.label :note, "Note", for: "trade-note" %>
+        <%= form.text_field :note, id: "trade-note", maxlength: 200, placeholder: "Optional" %>
+      </div>
+      <%= form.submit "Write it down", class: "button button-primary" %>
+    <% end %>
+    <p class="muted">For a sale, the price it was listed at: the journal takes off the auction house's <%= number_to_percentage(Flip::AUCTION_HOUSE_CUT * 100, precision: 0) %> cut.</p>
+  </details>
+</section>

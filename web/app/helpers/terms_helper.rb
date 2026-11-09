@@ -13,7 +13,7 @@ module TermsHelper
     resale: "Buying the cheapest unit and selling it at the usual price, after the auction house's #{(Flip::AUCTION_HOUSE_CUT * 100).round}% cut.",
     listings: "Separate listings, each of one or more units.",
     target: "The price you would buy at. The row is flagged once the cheapest unit costs that much or less.",
-    best_hour: "When the most units of it sold over the last two weeks, by hour of the day, Paris time.",
+    best_hour: "When the most units of it sold over the last two weeks, by hour of the day, in the time zone the page shows.",
     best_day: "Which day of the week the most units of it sold, on average over the last two weeks."
   }.freeze
 

@@ -1,8 +1,10 @@
-# What a reader follows, kept in a cookie: the site has no accounts, and never writes to
-# its database. Products, not prices on a given market: the list shows them on whatever
-# realm the reader is on. Each may carry a target price, which its cheapest listing is
-# compared to.
+# What a reader follows without an account, kept in a cookie: products, not prices on a
+# given market, so that the list shows them on whatever realm the reader is on. Each may
+# carry a target price, which its cheapest listing is compared to. Signing in moves it
+# all to the account: see AccountWatchlist.
 class Watchlist
+  include FollowedProducts
+
   # A cookie holds 4 KB, which this stays under even with a target on every product. The
   # oldest entries go first.
   LIMIT = 100
@@ -10,7 +12,7 @@ class Watchlist
   ENTRY = /\A(\d{1,9})(?:\.(\d{1,9}))?(?:-(\d{1,13}))?\z/
   # The cookie of the time products were followed market by market: market.item[.species].
   LEGACY_ENTRY = /\A\d{1,9}\.(\d{1,9})(?:\.(\d{1,9}))?\z/
-  SERIES = /\A(?:pet:(\d{1,9}))?\z/
+  SERIES = FollowedProducts::SERIES
 
   attr_reader :entries
 
@@ -20,19 +22,11 @@ class Watchlist
       .uniq { |entry| [ entry.item_id, entry.series ] }.last(LIMIT)
   end
 
-  def include?(item_id, series) = !entry_for(item_id, series).nil?
-
-  def target_for(item_id, series) = entry_for(item_id, series)&.target
-
-  def empty? = entries.empty?
-
-  def size = entries.size
-
-  def targets? = entries.any?(&:target)
+  def account? = false
 
   # Adds the product, or removes it if it was there. Anything malformed changes nothing.
   def toggle(item_id, series)
-    return unless valid?(item_id, series)
+    return unless valid_product?(item_id, series)
 
     item_id = item_id.to_i
     series = series.to_s
@@ -41,13 +35,13 @@ class Watchlist
     else
       (entries + [ Entry.new(item_id, series, nil) ]).last(LIMIT)
     end
-    @products = nil
+    forget_products
   end
 
   # Sets the target price of a product, which follows it from then on; nil takes the
   # target off and keeps following it.
   def set_target(item_id, series, target)
-    return unless valid?(item_id, series)
+    return unless valid_product?(item_id, series)
     return unless target.nil? || (target.is_a?(Integer) && target.between?(1, MoneyInput::MAX))
 
     item_id = item_id.to_i
@@ -58,7 +52,7 @@ class Watchlist
     else
       (entries + [ entry ]).last(LIMIT)
     end
-    @products = nil
+    forget_products
   end
 
   # Only characters a cookie carries as they are, so that the limit above holds.
@@ -69,42 +63,9 @@ class Watchlist
     end.join("_")
   end
 
-  # What is on sale on these markets at their latest snapshot, with its name and icon.
-  def products(markets)
-    return [] if empty? || markets.empty?
-
-    @products ||= {}
-    @products[markets.map(&:id)] ||= ListedProduct.find_by_sql([ <<~SQL, houses: markets.map(&:id), items: entries.map(&:item_id).uniq ])
-      SELECT listed.*, #{ListedProduct::LABELS}
-      #{ListedProduct::FROM_WITH_LABELS}
-      WHERE listed.auction_house_id IN (:houses) AND listed.item_id IN (:items)
-      ORDER BY #{ListedProduct::NAME} COLLATE "und-x-icu", listed.item_id, listed.series
-    SQL
-      .select { |row| include?(row.item_id, row.series) }
-  end
-
-  def not_on_sale(markets) = size - products(markets).size
-
-  # Whether the cheapest listing of this product is at or below its target.
-  def at_target?(row)
-    target = target_for(row.item_id, row.series)
-    !target.nil? && row.min_price <= target
-  end
-
-  # The products whose cheapest listing has come down to their target on these markets.
-  def at_target(markets)
-    targets? ? products(markets).select { |row| at_target?(row) } : []
-  end
-
   private
 
-  def entry_for(item_id, series) = entries.find { |entry| same?(entry, item_id, series) }
-
   def same?(entry, item_id, series) = entry.item_id == item_id && entry.series == series
-
-  def valid?(item_id, series)
-    item_id.to_s.match?(/\A\d{1,9}\z/) && series.to_s.match?(SERIES)
-  end
 
   def parse(text, pattern)
     item_id, species, target = text.match(pattern)&.captures

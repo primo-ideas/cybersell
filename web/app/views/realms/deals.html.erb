@@ -61,5 +61,12 @@
 <% end %>
 
 <p class="note">
+  <% if signed_in? %>
+    Shown: a resale profit of at least <%= number_to_percentage(@deals.min_margin * 100, precision: 0) %> of the price<%= " and #{money_text(@deals.min_profit)}" if @deals.min_profit.positive? %>,
+    as <%= link_to "your preferences", account_path(anchor: "preferences") %> ask.
+  <% else %>
+    Shown: a resale profit of at least <%= number_to_percentage(@deals.min_margin * 100, precision: 0) %> of the price and <%= money_text(@deals.min_profit) %>.
+    <%= link_to "Sign in", sign_in_path(return_to: request.fullpath) %> to choose your own thresholds.
+  <% end %>
   “Usually” is the median of the cheapest price over the last 3 days. The resale profit assumes selling at that price, after the auction house's <%= number_to_percentage(Flip::AUCTION_HOUSE_CUT * 100, precision: 0) %> cut. The cheapest listing can be a single unit, and a price can fall for good reasons, like a patch: check the curve first.
 </p>

@@ -9,6 +9,29 @@ Rails.application.routes.draw do
   resource :watchlist, only: %i[show update]
   patch "watchlist/target" => "watchlists#target", as: :watchlist_target
 
+  # Accounts: signing in is with Battle.net only, so no passwords live here.
+  get "sign-in" => "sessions#new", as: :sign_in
+  post "auth/battlenet" => "sessions#create", as: :auth_battlenet
+  get "auth/battlenet/callback" => "sessions#callback", as: :auth_battlenet_callback
+  post "auth/stub" => "sessions#stub", as: :auth_stub
+  delete "sign-out" => "sessions#destroy", as: :sign_out
+
+  resource :account, only: %i[show update destroy] do
+    get :export
+    delete "sessions/:id" => "accounts#sign_out_session", as: :session
+    delete "sessions" => "accounts#sign_out_other_sessions", as: :other_sessions
+    patch "email" => "emails#update", as: :email
+    post "email/confirmation" => "emails#resend", as: :email_confirmation
+    get "email/confirm" => "emails#confirm", as: :confirm_email
+  end
+  get "alerts/unsubscribe" => "emails#unsubscribe", as: :unsubscribe
+  post "alerts/unsubscribe" => "emails#stop_alerts"
+
+  patch "favorites" => "favorite_realms#toggle", as: :favorite_realm
+  resources :lists, only: %i[create update destroy]
+  resources :saved_products, only: :update
+  resources :trades, only: %i[index create destroy], path: "journal"
+
   # Everything is seen from a player's realm: /eu/hyjal, /eu/hyjal/items/2589.
   constraints region: /us|eu|kr|tw/, realm: %r{[^/.]+} do
     get ":region/:realm" => "realms#show", as: :realm

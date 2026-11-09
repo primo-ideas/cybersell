@@ -6,7 +6,7 @@
       <% if rhythm.hours? %>
         <p>
           Sells most around <strong data-tip="<%= term(:best_hour) %>" tabindex="0"><%= rhythm.best_hour.label %></strong>,
-          Paris time<% if rhythm.weekdays? %>, and on <strong data-tip="<%= term(:best_day) %>" tabindex="0"><%= rhythm.best_weekday.label.pluralize %></strong><% end %>:
+          <%= time_zone_label %><% if rhythm.weekdays? %>, and on <strong data-tip="<%= term(:best_day) %>" tabindex="0"><%= rhythm.best_weekday.label.pluralize %></strong><% end %>:
           list it a little before to be among the cheapest when buyers come.
         </p>
       <% end %>
@@ -16,7 +16,7 @@
       <div class="chart-pair">
         <%= render "charts/columns", chart: rhythm_chart(rhythm.hours, short_label: ->(bucket) { bucket.label.first(2) + "h" }),
               title: "By hour of the day", group: "hours", first_column: "Hour",
-              description: "Units sold per day in each hour, Paris time, over the last #{rhythm.days.round} days" %>
+              description: "Units sold per day in each hour, #{time_zone_label}, over the last #{rhythm.days.round} days" %>
         <% if rhythm.weekdays? %>
           <%= render "charts/columns", chart: rhythm_chart(rhythm.weekdays, short_label: ->(bucket) { bucket.label.first(3) }),
                 title: "By day of the week", group: "weekdays", first_column: "Day",

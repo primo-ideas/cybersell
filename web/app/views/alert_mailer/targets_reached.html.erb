@@ -1,0 +1,26 @@
+<p><%= @rows.one? ? "A product you follow is" : "#{@rows.size} products you follow are" %> at or below your target price on <%= @realm.name %>:</p>
+<table style="width: 100%; border-collapse: collapse;">
+  <thead>
+    <tr style="text-align: left; color: #777; font-size: 13px;">
+      <th style="padding: 6px 8px 6px 0;">Product</th>
+      <th style="padding: 6px 8px; text-align: right;">Cheapest now</th>
+      <th style="padding: 6px 0 6px 8px; text-align: right;">Your target</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @rows.each do |row| %>
+      <tr style="border-top: 1px solid #ddd;">
+        <td style="padding: 8px 8px 8px 0;">
+          <a href="<%= realm_item_url(@realm.region, @realm.slug, row.item_id, variant: row.variant_param) %>"><%= row.display_name %></a>
+        </td>
+        <td style="padding: 8px; text-align: right; white-space: nowrap;"><strong><%= money_text(row.min_price) %></strong></td>
+        <td style="padding: 8px 0 8px 8px; text-align: right; white-space: nowrap;"><%= money_text(@watchlist.target_for(row.item_id, row.series)) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+<p style="color: #777;">Listings change with every snapshot: the cheapest may be gone by the time you log in. You will hear about a product again once it has gone back above your target and come down to it again.</p>
+<p style="color: #777; font-size: 13px;">
+  <a href="<%= watchlist_url %>" style="color: #777;">Your lists</a> ·
+  <a href="<%= @unsubscribe_url %>" style="color: #777;">Stop these emails</a>
+</p>

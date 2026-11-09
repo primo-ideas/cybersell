@@ -1,12 +1,22 @@
 class WatchlistsController < ApplicationController
   def show
-    @products = current_realm ? watchlist.products(current_realm.markets) : []
-    @at_target = current_realm ? watchlist.at_target(current_realm.markets) : []
+    if signed_in?
+      @lists = current_user.lists.to_a
+      @list = @lists.find { |list| list.id.to_s == params[:list].to_s }
+      @shown = AccountWatchlist.new(current_user, list: @list)
+    else
+      @shown = watchlist
+    end
+    @products = current_realm ? @shown.products(current_realm.markets) : []
+    @at_target = current_realm ? @shown.at_target(current_realm.markets) : []
   end
 
   def update
-    watchlist.toggle(params[:item_id], params[:series])
-    save_watchlist
+    unless watchlist.toggle(params[:item_id], params[:series]) == false
+      save_watchlist
+    else
+      flash[:alert] = "Your lists hold #{User::MAX_PRODUCTS} products at most: remove some first." if watchlist.account? && watchlist.full?
+    end
     redirect_back_or_to watchlist_path, status: :see_other
   end
 
@@ -25,7 +35,10 @@ class WatchlistsController < ApplicationController
 
   private
 
+  # An account saves as it goes: only the cookie needs writing.
   def save_watchlist
+    return if watchlist.account?
+
     cookies[:watched] = cookie_options.merge(value: watchlist.to_cookie)
     cookies.delete(:watchlist, path: cookie_options[:path])
   end

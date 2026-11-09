@@ -1,19 +1,35 @@
-# The schema belongs to the fetcher (see fetcher/migrations): this app has no
-# migrations, and outside of tests Postgres itself refuses its writes.
+# Two databases. The market data belongs to the fetcher (see fetcher/migrations): the
+# site has no migrations for it, and outside of tests Postgres itself refuses its
+# writes. What players save in their account lives in a database of the site's own,
+# the only one it writes to, with its migrations in db/accounts_migrate.
 default: &default
   adapter: postgresql
   encoding: unicode
   max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
+market: &market
+  <<: *default
   url: <%= ENV.fetch("DATABASE_URL") %>
+  # db: tasks leave it alone: its schema is the fetcher's business.
+  database_tasks: false
   variables:
     default_transaction_read_only: "on"
 
-development:
+accounts: &accounts
   <<: *default
+  url: <%= ENV.fetch("ACCOUNTS_DATABASE_URL") %>
+  migrations_paths: db/accounts_migrate
+
+development:
+  primary: *market
+  accounts: *accounts
 
 test:
-  <<: *default
-  variables: {}
+  primary:
+    <<: *market
+    variables: {}
+  accounts: *accounts
 
 production:
-  <<: *default
+  primary: *market
+  accounts: *accounts

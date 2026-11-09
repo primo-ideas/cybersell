@@ -12,7 +12,7 @@ class ReadOnlyTest < ActiveSupport::TestCase
     configuration = Rails.application.config.database_configuration
 
     %w[development production].each do |environment|
-      assert_equal "on", configuration.dig(environment, "variables", "default_transaction_read_only"), environment
+      assert_equal "on", configuration.dig(environment, "primary", "variables", "default_transaction_read_only"), environment
     end
   end
 

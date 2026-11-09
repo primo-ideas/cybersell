@@ -1,0 +1,133 @@
+<% content_for :title, "Journal" %>
+
+<h1>Journal</h1>
+<p class="lead">What you bought and sold, and what it made you. Add a trade from a product's page. Sales count what they were listed at, less the auction house's <%= number_to_percentage(Flip::AUCTION_HOUSE_CUT * 100, precision: 0) %> cut.</p>
+
+<% if @ledger.empty? %>
+  <div class="empty-state">
+    <h2>Nothing written down yet</h2>
+    <p>Open a product, then use <strong>Write down a trade</strong> on its page after buying or selling it.</p>
+  </div>
+<% else %>
+  <% positions = @ledger.positions %>
+  <% held = positions.select { |position| position.stock.positive? } %>
+  <% worth = held.sum { |position| position.value_at(@prices[[ position.item_id, position.series ]]).to_i } %>
+  <section class="summary journal-summary" aria-label="Totals">
+    <dl class="summary-facts">
+      <div>
+        <dt data-tip="What sales brought in, less what those units cost you on average." tabindex="0">Profit made</dt>
+        <dd class="<%= profit_class(@ledger.realised) %>"><%= signed_money(@ledger.realised) %></dd>
+      </div>
+      <div>
+        <dt>Spent</dt>
+        <dd><%= money(@ledger.spent) %></dd>
+      </div>
+      <div>
+        <dt>Received <small class="muted">after the cut</small></dt>
+        <dd><%= money(@ledger.received) %></dd>
+      </div>
+      <div>
+        <dt data-tip="What selling everything you hold at the cheapest listing<%= " on #{current_realm.name}" if current_realm %> would bring, after the cut." tabindex="0">
+          Held, worth now
+        </dt>
+        <dd><%= held.any? ? money(worth) : "—" %></dd>
+      </div>
+    </dl>
+  </section>
+
+  <h2 class="section-title">By product</h2>
+  <div class="table-wrap">
+    <table class="listing">
+      <thead>
+        <tr>
+          <th scope="col">Product</th>
+          <th scope="col" class="number">Held</th>
+          <th scope="col" class="number col-medium"><span data-tip="What each unit held cost you, on average." tabindex="0">Average cost</span></th>
+          <th scope="col" class="number"><span data-tip="Cheapest listing<%= " on #{current_realm.name}" if current_realm %> right now." tabindex="0">Cheapest now</span></th>
+          <th scope="col" class="number col-medium"><span data-tip="What selling what you hold at the cheapest listing would make, after the cut, less what it cost." tabindex="0">If sold now</span></th>
+          <th scope="col" class="number">Profit made</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% positions.each do |position| %>
+          <% product = @products[[ position.item_id, position.series ]] %>
+          <% price = @prices[[ position.item_id, position.series ]] %>
+          <tr>
+            <td>
+              <div class="product-cell">
+                <%= product_icon(product.icon_url, product.quality) %>
+                <span class="product-label">
+                  <% if current_realm %>
+                    <%= link_to product.name, item_on_realm_path(current_realm, position.item_id, variant: position.series.presence),
+                          class: [ "product-link", quality_class(product.quality) ],
+                          data: { tooltip: item_tooltip_path(current_realm, position.item_id, position.series) } %>
+                  <% else %>
+                    <span class="<%= quality_class(product.quality) %>"><%= product.name %></span>
+                  <% end %>
+                  <% if position.unmatched.positive? %>
+                    <small class="muted" data-tip="Sold without a purchase written down before: their cost is unknown, so they count in what was received but not in the profit." tabindex="0">
+                      <%= number_with_delimiter(position.unmatched) %> sold with no purchase
+                    </small>
+                  <% end %>
+                </span>
+              </div>
+            </td>
+            <td class="number"><%= number_with_delimiter(position.stock) %></td>
+            <td class="number col-medium"><%= money(position.average_cost) %></td>
+            <td class="number"><%= position.stock.positive? ? money(price) : "—" %></td>
+            <td class="number col-medium">
+              <% unrealised = position.unrealised_at(price) %>
+              <%= unrealised ? tag.span(signed_money(unrealised), class: profit_class(unrealised)) : "—" %>
+            </td>
+            <td class="number"><span class="<%= profit_class(position.realised) %>"><%= signed_money(position.realised) %></span></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section-title" id="trades">Trades</h2>
+  <div class="table-wrap">
+    <table class="listing">
+      <thead>
+        <tr>
+          <th scope="col">Date</th>
+          <th scope="col">Product</th>
+          <th scope="col">Trade</th>
+          <th scope="col" class="number">Unit price</th>
+          <th scope="col" class="number col-medium">Total</th>
+          <th scope="col" class="col-wide">Realm</th>
+          <th scope="col"><span class="visually-hidden">Remove</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @trades.each do |trade| %>
+          <% product = @products[[ trade.item_id, trade.series ]] %>
+          <tr>
+            <td><%= l(trade.traded_at, format: "%b %-d, %Y") %></td>
+            <td>
+              <span class="<%= quality_class(product.quality) %>"><%= product.name %></span>
+              <% if trade.note %><small class="muted trade-note"><%= trade.note %></small><% end %>
+            </td>
+            <td><span class="pill <%= trade.buy? ? "pill-buy" : "pill-sell" %>"><%= trade.buy? ? "Bought" : "Sold" %></span> <%= number_with_delimiter(trade.quantity) %></td>
+            <td class="number"><%= money(trade.unit_price) %></td>
+            <td class="number col-medium"><%= money(trade.total) %></td>
+            <td class="col-wide muted"><%= trade.region.upcase %> <%= @realm_names.fetch([ trade.region, trade.realm_slug ], trade.realm_slug) %></td>
+            <td>
+              <%= button_to "Remove", trade_path(trade), method: :delete, class: "link-button",
+                    form: { data: { turbo_confirm: "Remove this trade from your journal?" } } %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if @page_count > 1 %>
+    <nav class="pagination" aria-label="Pages">
+      <% if @page > 1 %><%= link_to "← Newer", trades_path(page: @page - 1, anchor: "trades") %><% end %>
+      <span class="muted">Page <%= @page %> of <%= @page_count %></span>
+      <% if @page < @page_count %><%= link_to "Older →", trades_path(page: @page + 1, anchor: "trades") %><% end %>
+    </nav>
+  <% end %>
+<% end %>

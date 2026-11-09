@@ -32,6 +32,7 @@ SERVICE_USER=wowtrading
 OWNER_ROLE=wowtrading
 SITE_ROLE=wowtrading_site
 DATABASE=wow_trading
+ACCOUNTS_DATABASE=wow_trading_accounts
 # Below this much memory and without swap, compiling can get killed.
 SWAP_BELOW_MB=4000
 SWAP_FILE=/swapfile
@@ -199,6 +200,13 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO $SITE_ROLE;
 ALTER DEFAULT PRIVILEGES FOR ROLE $OWNER_ROLE IN SCHEMA public GRANT SELECT ON TABLES TO $SITE_ROLE;
 SQL
 
+  # What players save: the only database the site writes to, which it owns. Unlike market
+  # snapshots, none of it can be fetched again, so a commit must really be on disk.
+  if [ "$(psql_as_admin -tAc "SELECT 1 FROM pg_database WHERE datname = '$ACCOUNTS_DATABASE'")" != "1" ]; then
+    runuser -u postgres -- createdb --owner "$SITE_ROLE" --encoding UTF8 --locale C --template template0 "$ACCOUNTS_DATABASE"
+  fi
+  psql_as_admin -c "ALTER DATABASE $ACCOUNTS_DATABASE SET synchronous_commit = on"
+
   local version conf memory_mb shared_buffers
   version="$(psql_as_admin -tAc "SHOW server_version_num" | cut -c1-2)"
   conf="/etc/postgresql/$version/main/conf.d/wow-trading.conf"
@@ -242,6 +250,23 @@ SECRET_KEY_BASE=$(openssl rand -hex 64)
 ENV
   fi
 
+  # An install from before accounts: same role and password, in the database of its own.
+  if ! grep -q '^ACCOUNTS_DATABASE_URL=' "$SITE_ENV"; then
+    echo "ACCOUNTS_DATABASE_URL=$(value_of DATABASE_URL "$SITE_ENV" | sed -E 's#/[^/]*$##')/$ACCOUNTS_DATABASE" >> "$SITE_ENV"
+  fi
+  if ! grep -q 'SMTP_ADDRESS=' "$SITE_ENV"; then
+    cat >> "$SITE_ENV" <<ENV
+
+# To email players when a product reaches its target price. Without it, the site does
+# not offer alerts. Run the install again after setting these.
+# SMTP_ADDRESS=smtp.example.com
+# SMTP_PORT=587
+# SMTP_USERNAME=
+# SMTP_PASSWORD=
+# MAIL_FROM=alerts@example.com
+ENV
+  fi
+
   # Set on every run, as a domain can be added later.
   sed -i '/^SITE_HOST=/d;/^RAILS_RELATIVE_URL_ROOT=/d' "$SITE_ENV"
   if [ -n "$DOMAIN" ]; then
@@ -250,6 +275,12 @@ ENV
   if [ -n "$BASE_PATH" ]; then
     echo "RAILS_RELATIVE_URL_ROOT=$BASE_PATH" >> "$SITE_ENV"
   fi
+
+  # Signing in with Battle.net uses the fetcher's client. Only those two lines of its file,
+  # which also holds the password of the role that can write the market data.
+  sed -i '/^BLIZZARD_CLIENT_ID=/d;/^BLIZZARD_CLIENT_SECRET=/d' "$SITE_ENV"
+  echo "BLIZZARD_CLIENT_ID=$(value_of BLIZZARD_CLIENT_ID "$FETCHER_ENV")" >> "$SITE_ENV"
+  echo "BLIZZARD_CLIENT_SECRET=$(value_of BLIZZARD_CLIENT_SECRET "$FETCHER_ENV")" >> "$SITE_ENV"
 }
 
 # Each compiler can take over a gigabyte: fewer at a time is slower, but it finishes.
@@ -321,17 +352,34 @@ build_site() {
     # Compiling assets touches neither the database nor the secret, but Rails wants both set.
     # The path matters here: compiled stylesheets refer to their fonts by full path.
     RAILS_ENV=production SECRET_KEY_BASE_DUMMY=1 DATABASE_URL=postgres://unused/unused \
+      ACCOUNTS_DATABASE_URL=postgres://unused/unused \
       RAILS_RELATIVE_URL_ROOT="$BASE_PATH" bundle exec rails assets:precompile
   )
+}
+
+# With the very environment the site runs in, read by systemd rather than a shell: values
+# like MAIL_FROM may hold spaces.
+migrate_accounts() {
+  step "Migrating the accounts database"
+  systemd-run --quiet --wait --pipe --collect \
+    --uid="$SERVICE_USER" --gid="$SERVICE_USER" --working-directory="$APP/web" \
+    --property=EnvironmentFile="$SITE_ENV" \
+    --setenv=RAILS_ENV=production --setenv=BUNDLE_DEPLOYMENT=1 \
+    /usr/bin/env bundle exec rails db:migrate
 }
 
 install_units() {
   step "Installing the systemd units"
   install -m 644 "$REPO/deploy/wow-trading-fetcher.service" /etc/systemd/system/
   install -m 644 "$REPO/deploy/wow-trading-site.service" /etc/systemd/system/
+  install -m 644 "$REPO/deploy/wow-trading-alerts.service" /etc/systemd/system/
   sed "s|^OnCalendar=.*|OnCalendar=*:0/$POLL_MINUTES|" "$REPO/deploy/wow-trading-fetcher.timer" \
     > /etc/systemd/system/wow-trading-fetcher.timer
   chmod 644 /etc/systemd/system/wow-trading-fetcher.timer
+  # Two minutes after the fetcher's, to find what it has just stored.
+  sed "s|^OnCalendar=.*|OnCalendar=*:2/$POLL_MINUTES|" "$REPO/deploy/wow-trading-alerts.timer" \
+    > /etc/systemd/system/wow-trading-alerts.timer
+  chmod 644 /etc/systemd/system/wow-trading-alerts.timer
   systemctl daemon-reload
 }
 
@@ -425,11 +473,22 @@ start_services() {
   systemctl restart wow-trading-site.service
   systemctl enable wow-trading-fetcher.timer
 
+  # Starting Rails every few minutes is only worth it with a way to send the emails.
+  if [ -n "$(value_of SMTP_ADDRESS "$SITE_ENV")" ]; then
+    systemctl enable wow-trading-alerts.timer
+    systemctl restart wow-trading-alerts.timer
+  else
+    systemctl disable --now wow-trading-alerts.timer 2>/dev/null || true
+  fi
+
   if has_credentials; then
     systemctl restart wow-trading-fetcher.timer
     # Without waiting for it: a first cycle takes minutes. Not an error if one is running.
     systemctl start --no-block wow-trading-fetcher.service
     step "Done. Check with: sudo $REPO/deploy/check.sh"
+    if [ -n "$DOMAIN" ]; then
+      printf 'For players to sign in, add this redirect URL to your client on develop.battle.net:\n  https://%s%s/auth/battlenet/callback\n' "$DOMAIN" "$BASE_PATH"
+    fi
   else
     systemctl stop wow-trading-fetcher.timer
     step "Almost done: Battle.net credentials are missing"
@@ -440,7 +499,8 @@ start_services() {
 3. Start fetching:
      sudo systemctl enable --now wow-trading-fetcher.timer
      sudo systemctl start --no-block wow-trading-fetcher.service
-4. Check with:
+4. Run this script again, so that players can sign in with that client too.
+5. Check with:
      sudo $REPO/deploy/check.sh
 TEXT
   fi
@@ -463,6 +523,7 @@ ensure_user
 ensure_database
 build_fetcher
 build_site
+migrate_accounts
 install_units
 configure_web_server
 start_services

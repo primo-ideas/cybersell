@@ -91,6 +91,22 @@ module MoneyHelper
     number_with_precision(value, precision: 2, strip_insignificant_zeros: true, delimiter: ",")
   end
 
+  # A gain or a loss: "+12g 50s" or "−3g".
+  def signed_money(copper)
+    return money(nil) if copper.nil?
+
+    sign = if copper.positive? then "+" elsif copper.negative? then "−" else "" end
+    tag.span(class: "money", role: "img", "aria-label": "#{"minus " if copper.negative?}#{money_text(copper.abs)}") do
+      safe_join([ sign, *money_parts(copper.abs).map { |text, unit| tag.span(coin_amount(text, unit), class: "money-part") } ])
+    end
+  end
+
+  def profit_class(copper)
+    return "flat" if copper.nil? || copper.zero?
+
+    copper.positive? ? "gain" : "loss"
+  end
+
   # Below 1 %, a change reads as a change that did not happen.
   def change_class(fraction)
     return "flat" if fraction.nil? || fraction.abs < 0.0005

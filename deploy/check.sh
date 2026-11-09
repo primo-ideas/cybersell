@@ -42,6 +42,9 @@ for unit in postgresql wow-trading-site.service wow-trading-fetcher.timer; do
   if systemctl is-active --quiet "$unit"; then ok "$unit is running"; else bad "$unit is not running"; fi
 done
 systemctl list-timers wow-trading-fetcher.timer --no-pager --no-legend | sed 's/^/  next: /'
+if grep -q '^SMTP_ADDRESS=.' "$ETC/site.env" 2>/dev/null; then
+  if systemctl is-active --quiet wow-trading-alerts.timer; then ok "wow-trading-alerts.timer is running"; else bad "wow-trading-alerts.timer is not running"; fi
+fi
 result="$(systemctl show wow-trading-fetcher.service --property=Result --value)"
 state="$(systemctl show wow-trading-fetcher.service --property=ActiveState --value)"
 if [ "$result" = "success" ]; then

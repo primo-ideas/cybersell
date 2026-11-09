@@ -30,8 +30,11 @@ It then stops and asks for the Battle.net credentials:
    ```sh
    sudo systemctl enable --now wow-trading-fetcher.timer
    sudo systemctl start --no-block wow-trading-fetcher.service
+   sudo ./deploy/install.sh
    sudo ./deploy/check.sh
    ```
+
+   Running the script a second time gives the site that same client, for players to sign in. See [Accounts](#accounts).
 
 `check.sh` says what works and what does not, and shows no secret: its output can be shared to ask for help.
 
@@ -115,6 +118,22 @@ On a disk under 16 GB, the script adapts: 1 GB of swap instead of 2, less write-
 
 If disk runs short, lower `WOW_HOURLY_RETENTION_DAYS` in `/etc/wow-trading/fetcher.env`: 7 halves the hourly detail. The fetcher no longer runs when less than 1 GB is free, so that Postgres and the site keep working, and `check.sh` reports it.
 
+## Accounts
+
+Players sign in with Battle.net, with the fetcher's client. For that to work, add the address of the site's callback to the **Redirect URLs** of that client on <https://develop.battle.net/access/clients>. `install.sh` prints it when given a domain:
+
+```text
+https://trading.example.com/auth/battlenet/callback
+```
+
+With `BASE_PATH`, the path comes before `/auth`. Without this URL, Battle.net refuses to send players back to the site. The whole of the site still works without an account.
+
+What players save is in the `wow_trading_accounts` database. Nothing there can be fetched again, so back it up too.
+
+### Alerts by email
+
+The site only offers alerts once it can send emails. Uncomment and fill in `SMTP_ADDRESS` and the lines under it in `/etc/wow-trading/site.env`, with the details your email provider gives, then run `sudo ./deploy/install.sh` again. That starts `wow-trading-alerts.timer`, which looks for products that reached their target 2 minutes after each cycle of the fetcher. Check how your provider limits sending: each player gets at most one email per run.
+
 ## Day to day
 
 | To | Command |
@@ -126,7 +145,9 @@ If disk runs short, lower `WOW_HOURLY_RETENTION_DAYS` in `/etc/wow-trading/fetch
 | Pause the fetcher | `sudo systemctl stop wow-trading-fetcher.timer` |
 | Update | `git pull && sudo ./deploy/install.sh` |
 | Follow other markets | Change `WOW_SCOPE` in `/etc/wow-trading/fetcher.env`, taken into account at the next cycle |
-| Back up the database | `sudo -u postgres pg_dump -Fc wow_trading > wow_trading.dump` |
+| Read the alerts' logs | `journalctl -u wow-trading-alerts.service -f` |
+| Back up the market data | `sudo -u postgres pg_dump -Fc wow_trading > wow_trading.dump` |
+| Back up the accounts | `sudo -u postgres pg_dump -Fc wow_trading_accounts > wow_trading_accounts.dump` |
 
 No backup is automatic. The history cannot be rebuilt, as Blizzard only gives the present state: a regular dump, or Scaleway's volume snapshots, are the only safety net.
 
@@ -149,6 +170,6 @@ The fetcher looks them up again at 1,000 per cycle, which takes about 2 hours fo
 | Programs | `/opt/wow-trading` |
 | Credentials and settings, readable by root and `wowtrading` only | `/etc/wow-trading/fetcher.env`, `/etc/wow-trading/site.env` |
 | System user | `wowtrading` |
-| Postgres database and roles | `wow_trading`, `wowtrading` (owner, for the fetcher), `wowtrading_site` (read only, for the site) |
-| systemd units | `wow-trading-fetcher.service`, `wow-trading-fetcher.timer`, `wow-trading-site.service` |
+| Postgres databases and roles | `wow_trading`, `wowtrading` (owner, for the fetcher), `wowtrading_site` (read only there, for the site); `wow_trading_accounts`, owned by `wowtrading_site` |
+| systemd units | `wow-trading-fetcher.service`, `wow-trading-fetcher.timer`, `wow-trading-site.service`, `wow-trading-alerts.service`, `wow-trading-alerts.timer` |
 | With a domain | `/etc/caddy/Caddyfile`, the previous one being kept as `Caddyfile.before-wow-trading` |
