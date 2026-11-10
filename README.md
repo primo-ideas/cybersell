@@ -32,7 +32,7 @@ Without `-Scope`, the script fetches every realm of every region. Without `-Stub
 
 ## Deploy to a server
 
-On Ubuntu 26.04, `deploy/install.sh` installs everything, with the fetcher on a systemd timer every 5 minutes. See [the deployment guide](deploy/README.md), which also explains that frequency.
+On Ubuntu 26.04, `deploy/install.sh` installs everything, with the fetcher on a systemd timer every 5 minutes and a backup each night. See [the deployment guide](deploy/README.md), which also explains that frequency.
 
 ## run.ps1
 

@@ -9,6 +9,7 @@ set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run this as root: sudo $0" >&2; exit 1; }
 
 ETC=/etc/wow-trading
+BACKUPS=/var/backups/wow-trading
 DATABASE=wow_trading
 failed=0
 
@@ -38,7 +39,7 @@ fi
 printf '  scope: %s\n' "$(sed -n 's/^WOW_SCOPE=//p' "$ETC/fetcher.env" 2>/dev/null)"
 
 echo "Services"
-for unit in postgresql wow-trading-site.service wow-trading-fetcher.timer; do
+for unit in postgresql wow-trading-site.service wow-trading-fetcher.timer wow-trading-backup.timer; do
   if systemctl is-active --quiet "$unit"; then ok "$unit is running"; else bad "$unit is not running"; fi
 done
 systemctl list-timers wow-trading-fetcher.timer --no-pager --no-legend | sed 's/^/  next: /'
@@ -96,6 +97,23 @@ else
     bad "latest snapshot is $age_minutes minutes old: see the logs below"
   fi
 fi
+
+echo "Backups"
+for name in accounts market; do
+  latest="$(find "$BACKUPS" -maxdepth 1 -type f -name "$name-*.dump" -printf '%T@ %s %f\n' 2>/dev/null | sort -n | tail -n 1)"
+  if [ -z "$latest" ]; then
+    bad "no backup of the $name in $BACKUPS yet: journalctl -u wow-trading-backup.service"
+    continue
+  fi
+  read -r modified size file <<<"$latest"
+  hours=$(( ( $(date +%s) - ${modified%.*} ) / 3600 ))
+  if [ "$hours" -le 30 ]; then
+    ok "$file, $(numfmt --to=iec "$size")B, $hours hours old"
+  else
+    bad "the latest backup of the $name is $hours hours old: journalctl -u wow-trading-backup.service"
+  fi
+done
+echo "  These copies are on this server's own disk: see deploy/README.md to keep one elsewhere."
 
 echo "Recent problems in the fetcher's logs"
 journalctl --unit wow-trading-fetcher.service --since "-3 hours" --no-pager --output=cat --priority=warning 2>/dev/null | tail -n 5

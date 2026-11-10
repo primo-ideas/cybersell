@@ -1,0 +1,32 @@
+# Saves what cannot be fetched again, started by wow-trading-backup.timer. See deploy/README.md.
+[Unit]
+Description=WoW Trading: back up the accounts and the long-term market history
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+# Reaches every database without a password, over the local socket.
+User=postgres
+Group=postgres
+ExecStart=/opt/wow-trading/bin/backup.sh
+TimeoutStartSec=2h
+
+# Leave room for the site, which readers are waiting on.
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/wow-trading
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true

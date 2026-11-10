@@ -1,0 +1,12 @@
+# A backup each night, when the fewest players are about in Europe. A night the server was
+# off is made up for when it comes back.
+[Unit]
+Description=WoW Trading: back up every night
+
+[Timer]
+OnCalendar=*-*-* 03:40:00 UTC
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

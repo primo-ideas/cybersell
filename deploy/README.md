@@ -128,7 +128,7 @@ https://trading.example.com/auth/battlenet/callback
 
 With `BASE_PATH`, the path comes before `/auth`. Without this URL, Battle.net refuses to send players back to the site. The whole of the site still works without an account.
 
-What players save is in the `wow_trading_accounts` database. Nothing there can be fetched again, so back it up too.
+What players save is in the `wow_trading_accounts` database. Nothing there can be fetched again: see [Backups](#backups).
 
 ### Alerts by email
 
@@ -146,10 +146,29 @@ The site only offers alerts once it can send emails. Uncomment and fill in `SMTP
 | Update | `git pull && sudo ./deploy/install.sh` |
 | Follow other markets | Change `WOW_SCOPE` in `/etc/wow-trading/fetcher.env`, taken into account at the next cycle |
 | Read the alerts' logs | `journalctl -u wow-trading-alerts.service -f` |
-| Back up the market data | `sudo -u postgres pg_dump -Fc wow_trading > wow_trading.dump` |
-| Back up the accounts | `sudo -u postgres pg_dump -Fc wow_trading_accounts > wow_trading_accounts.dump` |
+| Back up right now | `sudo systemctl start wow-trading-backup.service` |
 
-No backup is automatic. The history cannot be rebuilt, as Blizzard only gives the present state: a regular dump, or Scaleway's volume snapshots, are the only safety net.
+### Backups
+
+Each night at 03:40 UTC, `wow-trading-backup.timer` saves what cannot be fetched again in `/var/backups/wow-trading`, and keeps 14 days of it. `install.sh` also takes one before each update.
+
+- `accounts-<day>.dump`: the whole of the accounts database, a few megabytes.
+- `market-<day>.dump`: the market data without the hourly detail of the last days, nor what the fetcher works out again at its next snapshot. That leaves the names of items, realms and markets, the log of snapshots and the daily history, a few hundred megabytes rather than tens of gigabytes. Restored, it loses at most the hours not yet rolled up into days, `WOW_HOURLY_RETENTION_DAYS` at worst.
+
+**These copies are on the server's own disk.** They protect from a mistake, not from losing the server: copy them elsewhere as well, or take Scaleway snapshots of the volume. `check.sh` says how old the latest are.
+
+To restore, with the services stopped so that nothing is connected meanwhile. Each command replaces a whole database, with its owner and settings, by the one in the file:
+
+```sh
+sudo systemctl stop wow-trading-site.service wow-trading-fetcher.timer wow-trading-fetcher.service wow-trading-alerts.timer wow-trading-alerts.service
+sudo -u postgres pg_restore --clean --if-exists --create -d postgres /var/backups/wow-trading/accounts-<day>.dump
+sudo -u postgres pg_restore --clean --if-exists --create -d postgres /var/backups/wow-trading/market-<day>.dump
+sudo ./deploy/install.sh
+```
+
+Without `--create`, restoring over the market data fails on its daily partitions.
+
+The fetcher fills in the latest snapshot at its next cycle, so curves and listings come back within the hour.
 
 ### Updating an install from before the rename
 
@@ -171,5 +190,6 @@ The fetcher looks them up again at 1,000 per cycle, which takes about 2 hours fo
 | Credentials and settings, readable by root and `wowtrading` only | `/etc/wow-trading/fetcher.env`, `/etc/wow-trading/site.env` |
 | System user | `wowtrading` |
 | Postgres databases and roles | `wow_trading`, `wowtrading` (owner, for the fetcher), `wowtrading_site` (read only there, for the site); `wow_trading_accounts`, owned by `wowtrading_site` |
-| systemd units | `wow-trading-fetcher.service`, `wow-trading-fetcher.timer`, `wow-trading-site.service`, `wow-trading-alerts.service`, `wow-trading-alerts.timer` |
+| systemd units | `wow-trading-fetcher.service`, `wow-trading-fetcher.timer`, `wow-trading-site.service`, `wow-trading-alerts.service`, `wow-trading-alerts.timer`, `wow-trading-backup.service`, `wow-trading-backup.timer` |
+| Backups, readable by `postgres` only | `/var/backups/wow-trading` |
 | With a domain | `/etc/caddy/Caddyfile`, the previous one being kept as `Caddyfile.before-wow-trading` |

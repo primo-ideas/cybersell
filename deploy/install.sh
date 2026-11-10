@@ -26,6 +26,7 @@ BASE_PATH="${BASE_PATH:-}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP=/opt/wow-trading
 ETC=/etc/wow-trading
+BACKUP_DIR=/var/backups/wow-trading
 FETCHER_ENV="$ETC/fetcher.env"
 SITE_ENV="$ETC/site.env"
 SERVICE_USER=wowtrading
@@ -283,6 +284,14 @@ ENV
   echo "BLIZZARD_CLIENT_SECRET=$(value_of BLIZZARD_CLIENT_SECRET "$FETCHER_ENV")" >> "$SITE_ENV"
 }
 
+# A copy of the databases as they are, before an update changes them, with the backup
+# script of the previous install. A first install has nothing to lose yet.
+backup_before_update() {
+  [ -x "$APP/bin/backup.sh" ] && [ -d "$BACKUP_DIR" ] || return 0
+  step "Backing up before the update"
+  runuser -u postgres -- env -C / BACKUP_DIR="$BACKUP_DIR" "$APP/bin/backup.sh"
+}
+
 # Each compiler can take over a gigabyte: fewer at a time is slower, but it finishes.
 build_jobs() {
   local memory_mb jobs
@@ -373,6 +382,9 @@ install_units() {
   install -m 644 "$REPO/deploy/wow-trading-fetcher.service" /etc/systemd/system/
   install -m 644 "$REPO/deploy/wow-trading-site.service" /etc/systemd/system/
   install -m 644 "$REPO/deploy/wow-trading-alerts.service" /etc/systemd/system/
+  install -m 644 "$REPO/deploy/wow-trading-backup.service" "$REPO/deploy/wow-trading-backup.timer" /etc/systemd/system/
+  install -m 755 "$REPO/deploy/backup.sh" "$APP/bin/backup.sh"
+  install -d -m 700 -o postgres -g postgres "$BACKUP_DIR"
   sed "s|^OnCalendar=.*|OnCalendar=*:0/$POLL_MINUTES|" "$REPO/deploy/wow-trading-fetcher.timer" \
     > /etc/systemd/system/wow-trading-fetcher.timer
   chmod 644 /etc/systemd/system/wow-trading-fetcher.timer
@@ -473,6 +485,12 @@ start_services() {
   systemctl restart wow-trading-site.service
   systemctl enable wow-trading-fetcher.timer
 
+  systemctl enable --now wow-trading-backup.timer
+  # Without waiting for the night: a new install deserves a first backup too.
+  if [ -z "$(ls -A "$BACKUP_DIR")" ]; then
+    systemctl start --no-block wow-trading-backup.service
+  fi
+
   # Starting Rails every few minutes is only worth it with a way to send the emails.
   if [ -n "$(value_of SMTP_ADDRESS "$SITE_ENV")" ]; then
     systemctl enable wow-trading-alerts.timer
@@ -521,6 +539,7 @@ load_saved_settings
 ensure_swap
 ensure_user
 ensure_database
+backup_before_update
 build_fetcher
 build_site
 migrate_accounts
