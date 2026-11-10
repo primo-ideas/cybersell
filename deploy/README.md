@@ -150,12 +150,12 @@ The site only offers alerts once it can send emails. Uncomment and fill in `SMTP
 
 ### Backups
 
-Each night at 03:40 UTC, `wow-trading-backup.timer` saves what cannot be fetched again in `/var/backups/wow-trading`, and keeps 14 days of it. `install.sh` also takes one before each update.
+Each night at 03:40 UTC, `wow-trading-backup.timer` saves what cannot be fetched again in `/var/backups/wow-trading`. `install.sh` also takes one before each update.
 
-- `accounts-<day>.dump`: the whole of the accounts database, a few megabytes.
-- `market-<day>.dump`: the market data without the hourly detail of the last days, nor what the fetcher works out again at its next snapshot. That leaves the names of items, realms and markets, the log of snapshots and the daily history, a few hundred megabytes rather than tens of gigabytes. Restored, it loses at most the hours not yet rolled up into days, `WOW_HOURLY_RETENTION_DAYS` at worst.
+- `accounts-<day>.dump`: the whole of the accounts database. It is small, and 14 days of it are kept, to go back to before a mistake.
+- `market-<day>.dump`: the market data without the hourly detail of the last days, nor what the fetcher works out again at its next snapshot. That leaves the names of items, realms and markets, the log of snapshots and the daily history. It starts at about a megabyte, then grows with each day of history, which is never purged. Each copy holds the whole of that history, so only the two latest are kept. Restored, it loses at most the hours not yet rolled up into days, `WOW_HOURLY_RETENTION_DAYS` at worst.
 
-**These copies are on the server's own disk.** They protect from a mistake, not from losing the server: copy them elsewhere as well, or take Scaleway snapshots of the volume. `check.sh` says how old the latest are.
+**These copies are on the server's own disk.** They protect from a mistake, not from losing the server: copy them elsewhere as well, or take Scaleway snapshots of the volume. `check.sh` says how old and how big the latest are.
 
 To restore, with the services stopped so that nothing is connected meanwhile. Each command replaces a whole database, with its owner and settings, by the one in the file:
 

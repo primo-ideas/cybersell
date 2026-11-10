@@ -8,7 +8,11 @@
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/wow-trading}"
+# Days of accounts kept, to go back to before a mistake: they are small.
 KEEP_DAYS="${KEEP_DAYS:-14}"
+# The market history only grows, so yesterday's copy is inside today's: the latest, and
+# one more in case it turns out bad, are enough. Each holds all of it, and grows with it.
+KEEP_MARKET="${KEEP_MARKET:-2}"
 ACCOUNTS_DATABASE="${ACCOUNTS_DATABASE:-wow_trading_accounts}"
 MARKET_DATABASE="${MARKET_DATABASE:-wow_trading}"
 
@@ -38,4 +42,6 @@ dump market --dbname="$MARKET_DATABASE" \
   --exclude-table-data=public.listed_products
 
 # Only once both have succeeded: backups that keep failing must not eat the good ones.
-find "$BACKUP_DIR" -maxdepth 1 -type f \( -name '*.dump' -o -name '*.part' \) -mtime +"$KEEP_DAYS" -delete
+# Names sort by day.
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'accounts-*.dump' -o -name '*.part' \) -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -maxdepth 1 -type f -name 'market-*.dump' | sort | head -n -"$KEEP_MARKET" | xargs -r rm -f --
