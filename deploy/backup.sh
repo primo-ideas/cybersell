@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
 # Saves what cannot be fetched again: the accounts, in full, and the long-term history
-# of the market data. Started each night by wow-trading-backup.timer: see deploy/README.md.
+# of the market data. Started each night by ludeal-backup.timer: see deploy/README.md.
 #
 # Left out of the market data, and 99% of its size: the hourly detail of the last days,
 # and what the fetcher works out again at its next snapshot.
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/wow-trading}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/ludeal}"
 # Days of accounts kept, to go back to before a mistake: they are small.
 KEEP_DAYS="${KEEP_DAYS:-14}"
 # The market history only grows, so yesterday's copy is inside today's: the latest, and
 # one more in case it turns out bad, are enough. Each holds all of it, and grows with it.
 KEEP_MARKET="${KEEP_MARKET:-2}"
-ACCOUNTS_DATABASE="${ACCOUNTS_DATABASE:-wow_trading_accounts}"
-MARKET_DATABASE="${MARKET_DATABASE:-wow_trading}"
+ACCOUNTS_DATABASE="${ACCOUNTS_DATABASE:-ludeal_accounts}"
+MARKET_DATABASE="${MARKET_DATABASE:-ludeal_wow}"
 
 # Accounts hold email addresses.
 umask 077

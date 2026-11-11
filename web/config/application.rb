@@ -33,7 +33,7 @@ module Web
     config.i18n.available_locales = [ :en ]
 
     # Other sites may share the domain: cookies stay within this one's path.
-    config.session_store :cookie_store, key: "_wow_trading_session", path: ENV["RAILS_RELATIVE_URL_ROOT"].presence || "/",
+    config.session_store :cookie_store, key: "_ludeal_session", path: ENV["RAILS_RELATIVE_URL_ROOT"].presence || "/",
       secure: ENV["SITE_HOST"].present?
 
     # Don't generate system test files.
@@ -56,7 +56,7 @@ module Web
       }.compact
     end
     config.action_mailer.default_options = {
-      from: ENV["MAIL_FROM"].presence || "WoW Trading <alerts@#{ENV["SITE_HOST"].presence || "localhost"}>"
+      from: ENV["MAIL_FROM"].presence || "Ludeal <alerts@#{ENV["SITE_HOST"].presence || "localhost"}>"
     }
     config.action_mailer.default_url_options = {
       host: ENV["SITE_HOST"].presence || "127.0.0.1",

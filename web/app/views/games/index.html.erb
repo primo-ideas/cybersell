@@ -1,0 +1,19 @@
+<section class="hero hero-picker">
+  <h1>What things sell for, game by game</h1>
+  <p class="lead">Ludeal follows the auction houses and markets of games: what an item costs now, where its price is heading and how fast it sells.</p>
+</section>
+
+<section aria-labelledby="games-title">
+  <h2 id="games-title" class="visually-hidden">Games</h2>
+  <ul class="game-list">
+    <% @games.each do |game| %>
+      <li>
+        <%= link_to game_path(game), class: "game-card" do %>
+          <strong><%= game.name %></strong>
+          <span><%= game.summary %></span>
+        <% end %>
+      </li>
+    <% end %>
+  </ul>
+  <p class="note game-note">More games are on the way.</p>
+</section>

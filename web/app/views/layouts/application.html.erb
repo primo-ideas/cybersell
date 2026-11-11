@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title><%= [ content_for(:title), "WoW Trading" ].compact.join(" · ") %></title>
+    <title><%= [ content_for(:title), "Ludeal" ].compact.join(" · ") %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="description" content="World of Warcraft auction house prices: trends and estimated sales, realm by realm.">
+    <meta name="description" content="What things sell for in games: auction house prices, trends and estimated sales. World of Warcraft, realm by realm.">
     <meta name="turbo-prefetch" content="false">
     <meta name="turbo-root" content="<%= request.script_name.presence || "/" %>">
     <meta name="color-scheme" content="dark">
@@ -31,7 +31,7 @@
       <%= yield %>
     </main>
     <footer class="site-footer">
-      <p>Data from the Battle.net API, collected about once an hour. Sales are estimated.</p>
+      <p>World of Warcraft data from the Battle.net API, collected about once an hour. Sales are estimated.</p>
       <p>Not affiliated with Blizzard Entertainment. World of Warcraft is a trademark of Blizzard Entertainment, Inc.</p>
     </footer>
   </body>

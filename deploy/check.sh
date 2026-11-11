@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Says whether WoW Trading is working on this server. Prints no secret, so its output
+# Says whether Ludeal is working on this server. Prints no secret, so its output
 # can be shared to get help.
 #
 #   sudo ./deploy/check.sh
@@ -8,9 +8,9 @@ set -uo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "run this as root: sudo $0" >&2; exit 1; }
 
-ETC=/etc/wow-trading
-BACKUPS=/var/backups/wow-trading
-DATABASE=wow_trading
+ETC=/etc/ludeal
+BACKUPS=/var/backups/ludeal
+DATABASE=ludeal_wow
 failed=0
 
 ok() { printf '  ok    %s\n' "$*"; }
@@ -39,15 +39,15 @@ fi
 printf '  scope: %s\n' "$(sed -n 's/^WOW_SCOPE=//p' "$ETC/fetcher.env" 2>/dev/null)"
 
 echo "Services"
-for unit in postgresql wow-trading-site.service wow-trading-fetcher.timer wow-trading-backup.timer; do
+for unit in postgresql ludeal-site.service ludeal-wow-fetcher.timer ludeal-backup.timer; do
   if systemctl is-active --quiet "$unit"; then ok "$unit is running"; else bad "$unit is not running"; fi
 done
-systemctl list-timers wow-trading-fetcher.timer --no-pager --no-legend | sed 's/^/  next: /'
+systemctl list-timers ludeal-wow-fetcher.timer --no-pager --no-legend | sed 's/^/  next: /'
 if grep -q '^SMTP_ADDRESS=.' "$ETC/site.env" 2>/dev/null; then
-  if systemctl is-active --quiet wow-trading-alerts.timer; then ok "wow-trading-alerts.timer is running"; else bad "wow-trading-alerts.timer is not running"; fi
+  if systemctl is-active --quiet ludeal-alerts.timer; then ok "ludeal-alerts.timer is running"; else bad "ludeal-alerts.timer is not running"; fi
 fi
-result="$(systemctl show wow-trading-fetcher.service --property=Result --value)"
-state="$(systemctl show wow-trading-fetcher.service --property=ActiveState --value)"
+result="$(systemctl show ludeal-wow-fetcher.service --property=Result --value)"
+state="$(systemctl show ludeal-wow-fetcher.service --property=ActiveState --value)"
 if [ "$result" = "success" ]; then
   ok "last cycle succeeded (now: $state)"
 else
@@ -70,6 +70,15 @@ if [ -n "$site_host" ]; then
     bad "does not answer on https://$site_host$base_path: check its DNS, and that ports 80 and 443 are open"
   fi
 fi
+# A domain the World of Warcraft pages had to themselves: its addresses lead to the site.
+for old_host in $(sed -n 's/^WOW_HOSTS=//p' "$ETC/site.env" 2>/dev/null | tr ',' ' '); do
+  target="$(curl --silent --max-time 15 --output /dev/null --write-out '%{redirect_url}' "https://$old_host/")"
+  if [ "$target" = "https://$site_host$base_path/wow" ]; then
+    ok "https://$old_host leads to $target"
+  else
+    bad "https://$old_host does not lead to https://$site_host$base_path/wow: what serves it must send it all to the site, on 127.0.0.1:3000"
+  fi
+done
 
 echo "Network"
 if curl --silent --max-time 10 --output /dev/null https://oauth.battle.net/; then
@@ -102,7 +111,7 @@ echo "Backups"
 for name in accounts market; do
   latest="$(find "$BACKUPS" -maxdepth 1 -type f -name "$name-*.dump" -printf '%T@ %s %f\n' 2>/dev/null | sort -n | tail -n 1)"
   if [ -z "$latest" ]; then
-    bad "no backup of the $name in $BACKUPS yet: journalctl -u wow-trading-backup.service"
+    bad "no backup of the $name in $BACKUPS yet: journalctl -u ludeal-backup.service"
     continue
   fi
   read -r modified size file <<<"$latest"
@@ -110,20 +119,20 @@ for name in accounts market; do
   if [ "$hours" -le 30 ]; then
     ok "$file, $(numfmt --to=iec "$size")B, $hours hours old"
   else
-    bad "the latest backup of the $name is $hours hours old: journalctl -u wow-trading-backup.service"
+    bad "the latest backup of the $name is $hours hours old: journalctl -u ludeal-backup.service"
   fi
 done
 echo "  These copies are on this server's own disk: see deploy/README.md to keep one elsewhere."
 
 echo "Recent problems in the fetcher's logs"
-journalctl --unit wow-trading-fetcher.service --since "-3 hours" --no-pager --output=cat --priority=warning 2>/dev/null | tail -n 5
-journalctl --unit wow-trading-fetcher.service --since "-3 hours" --no-pager --output=cat 2>/dev/null |
+journalctl --unit ludeal-wow-fetcher.service --since "-3 hours" --no-pager --output=cat --priority=warning 2>/dev/null | tail -n 5
+journalctl --unit ludeal-wow-fetcher.service --since "-3 hours" --no-pager --output=cat 2>/dev/null |
   grep -E ' (ERROR|WARN) |^error' | cut -c1-200 | tail -n 10
 
 echo
 if [ "$failed" -eq 0 ]; then
   echo "Everything looks fine."
 else
-  echo "Something is wrong: see FAIL above. Logs: journalctl -u wow-trading-fetcher.service -u wow-trading-site.service -n 100"
+  echo "Something is wrong: see FAIL above. Logs: journalctl -u ludeal-wow-fetcher.service -u ludeal-site.service -n 100"
   exit 1
 fi

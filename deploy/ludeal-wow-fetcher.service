@@ -1,19 +1,19 @@
-# One fetch cycle, started by wow-trading-fetcher.timer. See deploy/README.md.
+# One fetch cycle, started by ludeal-wow-fetcher.timer. See deploy/README.md.
 [Unit]
-Description=WoW Trading: fetch auction house data from Battle.net
+Description=Ludeal: fetch auction house data from Battle.net
 After=network-online.target postgresql.service
 Wants=network-online.target
 Requires=postgresql.service
 
 [Service]
 Type=oneshot
-User=wowtrading
-Group=wowtrading
-EnvironmentFile=/etc/wow-trading/fetcher.env
+User=ludeal
+Group=ludeal
+EnvironmentFile=/etc/ludeal/fetcher.env
 # Postgres stops working when its disk is full, and takes the site down with it: stop
 # adding data first. The unit then shows as failed, and tries again at the next tick.
 ExecStartPre=/bin/sh -c 'test "$$(df --output=avail -k /var/lib/postgresql | tail -n 1)" -gt 1048576 || { echo "Less than 1 GB left on the disk of the database, not fetching."; exit 1; }'
-ExecStart=/opt/wow-trading/bin/wow-trading-fetcher once
+ExecStart=/opt/ludeal/bin/ludeal-wow-fetcher once
 # 2: some markets failed, and the next cycle retries them. Not worth a failed unit.
 SuccessExitStatus=2
 # A cycle stuck on something must not block the following ones forever.

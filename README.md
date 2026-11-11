@@ -1,8 +1,8 @@
-# WoW Trading
+# Ludeal
 
-Price curves and estimated sales for the World of Warcraft auction house.
+What things sell for in games: price curves and estimated sales, game by game. World of Warcraft's auction house is the only game so far; the site is laid out for more, each in a section of its own.
 
-- [`fetcher/`](fetcher/): collects auctions from the Battle.net API and stores statistics in Postgres (Rust).
+- [`fetcher/`](fetcher/): collects World of Warcraft auctions from the Battle.net API and stores statistics in Postgres (Rust).
 - [`web/`](web/): the site, which reads that database and never writes to it, and keeps players' accounts in a database of its own (Rails).
 - [`deploy/`](deploy/): installation on an Ubuntu server, see [its guide](deploy/README.md).
 
@@ -14,9 +14,9 @@ On Windows, with [PowerShell 7.2 or later](https://github.com/PowerShell/PowerSh
 ./run.ps1 -Stub
 ```
 
-On first use, the script installs Postgres and Ruby in `%LOCALAPPDATA%\wow-trading`, without admin rights, without touching the `PATH` and without creating a service. It then simulates a week of auctions, starts the site on <http://127.0.0.1:3000> and opens the browser. Ctrl-C stops everything it started.
+On first use, the script installs Postgres and Ruby in `%LOCALAPPDATA%\ludeal`, without admin rights, without touching the `PATH` and without creating a service. It then simulates a week of auctions, starts the site on <http://127.0.0.1:3000> and opens the browser. Ctrl-C stops everything it started.
 
-`-Stub` writes to a separate database, `wow_trading_stub`: fake data cannot mix with the real history. It also offers to sign in as a test player, without Battle.net.
+`-Stub` writes to a separate database, `ludeal_wow_stub`: fake data cannot mix with the real history. It also offers to sign in as a test player, without Battle.net.
 
 ## Connect Battle.net
 
@@ -51,13 +51,13 @@ On Ubuntu 26.04, `deploy/install.sh` installs everything, with the fetcher on a 
 The script only works on Windows. Elsewhere, with a Postgres server and Ruby already installed (these commands have not been tested outside Windows):
 
 ```sh
-export DATABASE_URL=postgres://user:password@localhost:5432/wow_trading
-cargo run -p wow-trading-fetcher -- --stub once
+export DATABASE_URL=postgres://user:password@localhost:5432/ludeal_wow
+cargo run -p ludeal-wow-fetcher -- --stub once
 
 cd web
 bundle install
-export DATABASE_URL=postgres://user:password@localhost:5432/wow_trading_stub
-export ACCOUNTS_DATABASE_URL=postgres://user:password@localhost:5432/wow_trading_accounts
+export DATABASE_URL=postgres://user:password@localhost:5432/ludeal_wow_stub
+export ACCOUNTS_DATABASE_URL=postgres://user:password@localhost:5432/ludeal_accounts
 bin/rails db:prepare
 bin/rails server
 ```
@@ -67,8 +67,8 @@ The fetcher creates the database if it does not exist and applies its own migrat
 ## Fetcher
 
 ```sh
-cargo run -p wow-trading-fetcher -- once    # one cycle, exit code 2 if a market failed
-cargo run -p wow-trading-fetcher -- watch   # one cycle every 10 minutes, until Ctrl-C
+cargo run -p ludeal-wow-fetcher -- once    # one cycle, exit code 2 if a market failed
+cargo run -p ludeal-wow-fetcher -- watch   # one cycle every 10 minutes, until Ctrl-C
 ```
 
 Each option can be passed on the command line or as an environment variable, possibly in `.env`. A variable already set in the environment wins over the file.
@@ -158,17 +158,21 @@ This remains an estimate. A cancelled auction looks like a sale, which inflates 
 
 ## Site
 
+The front page, `/`, lists the games. Each has its section under a short name: `/wow` for World of Warcraft, where every address below starts. Accounts belong to the whole site, not to a game.
+
 A player picks their realm, then searches for an item. Markets never show: each page of a realm adds up the auction house it shares with its connected realms and the commodities of its region, and an item's page is on whichever of the two trades it.
 
-- `/`: the last realm visited, or failing that the realm picker (`/realms`), which suggests realms as you type, without regard for accents. A realm can be picked once its own market, or the commodities of its region, are followed.
-- `/:region/:realm`, for example `/eu/hyjal`: a search box, the biggest rises and falls over 24 hours and the most traded, then everything for sale at the latest snapshot, to sort and filter by name, id, category or quality, ignoring accents and case.
-- `/:region/:realm/deals`: what sells well below its usual price, with what is left after reselling at that price. See [Deals](#deals).
-- `/:region/:realm/items/:id`: price curves, estimated sales and quantity for sale, over 24 hours, 7, 30 or 90 days, or the whole history. Each chart has its data table. The page also gives the usual cheapest price, when the product sells by hour of the day and day of the week over the last two weeks, the same product on the cheapest realms of the region along with where the reader's own ranks, and a CSV download of the prices (`.csv`, in copper and UTC).
-- `/:region/:realm/search`: searches the realm. The header of each page offers suggestions as you type, with `/` or Ctrl-K to get there.
-- `/watchlist`: the products a reader follows, at their latest prices on their realm, each with a target price if they set one, typed as the game writes amounts (`12g 50s`), as gold (`12.5`) or in thousands of gold (`1.5k`). Once the cheapest listing reaches it, the row and the header of every page say so. Without an account it lives in a cookie.
-- `/sign-in`, `/account`, `/journal`: see [Accounts](#accounts).
+- `/wow`: the last realm visited, or failing that the realm picker (`/wow/realms`), which suggests realms as you type, without regard for accents. A realm can be picked once its own market, or the commodities of its region, are followed.
+- `/wow/:region/:realm`, for example `/wow/eu/hyjal`: a search box, the biggest rises and falls over 24 hours and the most traded, then everything for sale at the latest snapshot, to sort and filter by name, id, category or quality, ignoring accents and case.
+- `/wow/:region/:realm/deals`: what sells well below its usual price, with what is left after reselling at that price. See [Deals](#deals).
+- `/wow/:region/:realm/items/:id`: price curves, estimated sales and quantity for sale, over 24 hours, 7, 30 or 90 days, or the whole history. Each chart has its data table. The page also gives the usual cheapest price, when the product sells by hour of the day and day of the week over the last two weeks, the same product on the cheapest realms of the region along with where the reader's own ranks, and a CSV download of the prices (`.csv`, in copper and UTC).
+- `/wow/:region/:realm/search`: searches the realm. The header of each page offers suggestions as you type, with `/` or Ctrl-K to get there.
+- `/wow/watchlist`: the products a reader follows, at their latest prices on their realm, each with a target price if they set one, typed as the game writes amounts (`12g 50s`), as gold (`12.5`) or in thousands of gold (`1.5k`). Once the cheapest listing reaches it, the row and the header of every page say so. Without an account it lives in a cookie.
+- `/sign-in`, `/account`, `/wow/journal`: see [Accounts](#accounts).
 
-Hovering a product shows its card: what it is, and its prices on the realm. The products a reader opened last show under the search box of a realm's page, and in the suggestions before anything is typed; that list stays in their browser. Hovering the label of a figure says what it means. The addresses of the time the site was organised by market (`/markets/:id`, `/search`) lead to the same pages on the player's realm.
+Hovering a product shows its card: what it is, and its prices on the realm. The products a reader opened last show under the search box of a realm's page, and in the suggestions before anything is typed; that list stays in their browser. Hovering the label of a figure says what it means. The addresses of the time the site was organised by market (`/wow/markets/:id`, `/wow/search`) lead to the same pages on the player's realm.
+
+The World of Warcraft pages once had a domain to themselves, with these addresses at its root. With `WOW_HOSTS` set to that domain, and `SITE_HOST` to the site's, every address of the old domain redirects to the same page of the site: under `/wow`, or at the root for what belongs to no game, like `/account`. See [the deployment guide](deploy/README.md#a-domain-the-world-of-warcraft-pages-had-to-themselves).
 
 ### Deals
 
@@ -183,7 +187,7 @@ The schema of the market data belongs to the fetcher: the site has no migrations
 An account is optional: everything above works without one. Players sign in with Battle.net, so the site stores no password, only their BattleTag and the names of their characters. Signing in moves what the browser followed into the account. It gives them:
 
 - **Lists.** What they follow is on every device, in as many named lists as they like, each product with its target price and a note. A product is in one list: the star adds it to the first, and its page moves it to another.
-- **A journal** (`/journal`). They write down what they buy and sell from a product's page. It works out what they hold and what it cost on average, what they made after the auction house's cut, and what selling now would bring at the cheapest listing. Units sold with no purchase written down have no known cost, so they do not count as profit.
+- **A journal** (`/wow/journal`). They write down what they buy and sell from a product's page. It works out what they hold and what it cost on average, what they made after the auction house's cut, and what selling now would bring at the cheapest listing. Units sold with no purchase written down have no known cost, so they do not count as profit.
 - **Alerts by email.** Once they have confirmed an address, one email per run lists the products that just came down to their target on the realm they visited last. A product says so once, then again only after going back above its target. Every email has a link to stop them.
 - **Preferences** (`/account`). Their time zone, the period charts open on, how the listing is sorted, and the thresholds of [deals](#deals).
 - **Their realms.** The last one visited follows them, and those they marked with a star and those of their characters top the realm picker.
@@ -203,6 +207,7 @@ All of it multiplies by the number of markets followed, which by default is ever
 
 ## Known limits
 
+- World of Warcraft is the only game. Nothing of what a second one needs exists yet: a fetcher of its own, its tables, its pages. Lists, the journal and alerts only know World of Warcraft products, and signing in is with Battle.net only.
 - `deploy/install.sh` has only run on a server that already had Apache: installing Caddy has not been tried.
 - Individual auctions are only kept until the next snapshot, so the history cannot be recomputed with other statistics.
 - The variants of a piece of gear show as their bonus list, which does not mean much to a player.

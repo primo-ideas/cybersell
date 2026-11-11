@@ -90,11 +90,11 @@ class SessionsController < ApplicationController
 
     notice = "Signed in as #{user.battletag}."
     notice += " The #{"product".pluralize(imported)} you followed in this browser #{imported == 1 ? "is" : "are"} now in your account." if imported.positive?
-    redirect_to return_to || (user.realm ? realm_path(user.realm.region, user.realm.slug) : root_path), notice: notice
+    redirect_to return_to || (user.realm ? realm_path(user.realm.region, user.realm.slug) : wow_path), notice: notice
   end
 
   # Only in development, and only when asked for: run.ps1 -Stub does, as its data is fake.
   def stub_sign_in?
-    Rails.env.local? && ENV["WOW_TRADING_STUB_SIGN_IN"] == "1"
+    Rails.env.local? && ENV["LUDEAL_STUB_SIGN_IN"] == "1"
   end
 end

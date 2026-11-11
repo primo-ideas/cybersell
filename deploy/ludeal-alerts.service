@@ -1,17 +1,17 @@
 # Emails players whose products reached their target price, started by
-# wow-trading-alerts.timer. See deploy/README.md.
+# ludeal-alerts.timer. See deploy/README.md.
 [Unit]
-Description=WoW Trading: email players about their target prices
+Description=Ludeal: email players about their target prices
 After=network-online.target postgresql.service
 Wants=network-online.target
 Requires=postgresql.service
 
 [Service]
 Type=oneshot
-User=wowtrading
-Group=wowtrading
-WorkingDirectory=/opt/wow-trading/web
-EnvironmentFile=/etc/wow-trading/site.env
+User=ludeal
+Group=ludeal
+WorkingDirectory=/opt/ludeal/web
+EnvironmentFile=/etc/ludeal/site.env
 Environment=RAILS_ENV=production RAILS_MAX_THREADS=1 BUNDLE_DEPLOYMENT=1
 ExecStart=/usr/bin/env bundle exec rails alerts:deliver
 # A server that does not answer must not hold up the following runs forever.
@@ -24,7 +24,7 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/wow-trading/web/tmp /opt/wow-trading/web/log
+ReadWritePaths=/opt/ludeal/web/tmp /opt/ludeal/web/log
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

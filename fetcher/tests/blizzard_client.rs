@@ -6,10 +6,10 @@ use serde_json::Value;
 use wiremock::matchers::{basic_auth, bearer_token, body_string, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use wow_trading_fetcher::api::blizzard::{BlizzardClient, Credentials, Endpoints, RetryPolicy};
-use wow_trading_fetcher::api::{ApiError, AuctionApi, AuctionSource, Fetched};
-use wow_trading_fetcher::config::Region;
-use wow_trading_fetcher::sales::TimeLeft;
+use ludeal_wow_fetcher::api::blizzard::{BlizzardClient, Credentials, Endpoints, RetryPolicy};
+use ludeal_wow_fetcher::api::{ApiError, AuctionApi, AuctionSource, Fetched};
+use ludeal_wow_fetcher::config::Region;
+use ludeal_wow_fetcher::sales::TimeLeft;
 
 const INDEX: &str = include_str!("../fixtures/connected_realm_index.json");
 const CONNECTED_REALMS: &str = include_str!("../fixtures/connected_realms.json");

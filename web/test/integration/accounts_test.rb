@@ -43,7 +43,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
     state = Rack::Utils.parse_query(URI(response.location).query)["state"]
     get auth_battlenet_callback_path, params: { code: "abc", state: state }
 
-    assert_redirected_to root_path
+    assert_redirected_to wow_path
     assert_equal "Thrall#1234", user.battletag
     assert_equal [ "Thrallia" ], user.characters.map(&:name)
 
@@ -106,14 +106,14 @@ class AccountsTest < ActionDispatch::IntegrationTest
   end
 
   test "signing in comes back to the page the player was on, and only of this site" do
-    sign_in(return_to: "/watchlist?list=1")
-    assert_redirected_to "/watchlist?list=1"
+    sign_in(return_to: "/wow/watchlist?list=1")
+    assert_redirected_to "/wow/watchlist?list=1"
 
     delete sign_out_path
 
     [ "//evil.example", "https://evil.example/", "/\\evil.example", "evil" ].each do |target|
       sign_in(return_to: target)
-      assert_redirected_to root_path, target
+      assert_redirected_to wow_path, target
       delete sign_out_path
     end
   end
@@ -204,7 +204,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
   end
 
   test "the test player signs in without Battle.net when asked for" do
-    ENV["WOW_TRADING_STUB_SIGN_IN"] = "1"
+    ENV["LUDEAL_STUB_SIGN_IN"] = "1"
     BattleNet.client = BattleNet.new("", "")
 
     get sign_in_path
@@ -216,7 +216,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
     assert_equal "TestPlayer#1234", User.first.battletag
     assert_equal [ "hyjal" ], User.first.characters.map(&:realm_slug)
   ensure
-    ENV.delete("WOW_TRADING_STUB_SIGN_IN")
+    ENV.delete("LUDEAL_STUB_SIGN_IN")
   end
 
   # Lists
@@ -480,7 +480,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
     other_browser.post auth_battlenet_path
     state = Rack::Utils.parse_query(URI(other_browser.response.location).query)["state"]
     other_browser.get auth_battlenet_callback_path, params: { code: "abc", state: state }
-    other_browser.get root_path
+    other_browser.get wow_path
 
     other_browser.assert_redirected_to realm_home_path(@realm)
   end
@@ -734,7 +734,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "application/json", response.media_type
-    assert_match(/attachment; filename="wow-trading-thrall-1234-/, response.headers["Content-Disposition"])
+    assert_match(/attachment; filename="ludeal-thrall-1234-/, response.headers["Content-Disposition"])
     assert_equal "Keep", JSON.parse(response.body).dig("lists", 0, "products", 0, "note")
   end
 

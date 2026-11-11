@@ -47,7 +47,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     connection.execute("SAVEPOINT without_schema")
     connection.execute("ALTER TABLE auction_houses RENAME TO auction_houses_hidden")
 
-    get root_path
+    get wow_path
 
     assert_response :service_unavailable
     assert_select "h1", "Just a moment"
@@ -55,10 +55,22 @@ class PagesTest < ActionDispatch::IntegrationTest
     connection.execute("ROLLBACK TO SAVEPOINT without_schema")
   end
 
+  # Games
+
+  test "the front page lists the games, each leading to its section" do
+    get root_path
+
+    assert_response :success
+    assert_select "title", "Ludeal"
+    assert_select ".game-card[href=?]", wow_path, /World of Warcraft/
+    assert_select ".brand[href=?]", root_path
+    assert_select ".game-link[href=?]", wow_path
+  end
+
   # Realms
 
   test "the home page says when nothing was fetched yet" do
-    get root_path
+    get wow_path
 
     assert_response :success
     assert_select ".empty-state", /fetcher/
@@ -68,7 +80,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     seed_item
     create_realm(create_market(connected_realm_id: 77, name: "Never fetched"), name: "Ghost")
 
-    get root_path
+    get wow_path
 
     assert_response :success
     assert_select "input[role=combobox][aria-controls=realm-suggestions]"
@@ -82,7 +94,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     seed_commodity
     ghost = create_realm(create_market(connected_realm_id: 77, name: "Never fetched"), name: "Ghost")
 
-    get root_path
+    get wow_path
 
     assert_select ".realm-list a[href=?]", home(ghost), "Ghost"
 
@@ -97,7 +109,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     seed_item
     seed_commodity
 
-    [ root_path, home, deals_page, item_page(2589), item_page(2770), search_page(q: "o") ].each do |page|
+    [ wow_path, home, deals_page, item_page(2589), item_page(2770), search_page(q: "o") ].each do |page|
       get page
       assert_response :success
       assert_no_match "Archimonde / Naxxramas", response.body, page
@@ -109,7 +121,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     seed_item
 
     get home(@connected)
-    get root_path
+    get wow_path
 
     assert_redirected_to home(@connected)
   end
@@ -118,7 +130,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     seed_item
     cookies[:realm] = "eu/nowhere"
 
-    get root_path
+    get wow_path
 
     assert_response :success
     assert_select ".realm-picker"
@@ -284,7 +296,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     get realm_path("eu", "nowhere")
     assert_response :not_found
 
-    get "/xx/archimonde"
+    get "/wow/xx/archimonde"
     assert_response :not_found
   end
 
@@ -487,7 +499,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     get tooltip_page(2589)
 
     assert_select ".item-tip-where", /Not for sale on Archimonde/
-    get root_path
+    get wow_path
     assert_redirected_to home(@connected)
   end
 
@@ -525,7 +537,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     get search_page(@connected), params: { q: "linen", fragment: "1" }
 
     assert_select "a.result[href=?]", item_page(2589, @connected)
-    get root_path
+    get wow_path
     assert_redirected_to home(@connected)
   end
 
@@ -560,7 +572,7 @@ class PagesTest < ActionDispatch::IntegrationTest
   test "before a realm is picked, there is nothing to search" do
     seed_item
 
-    get root_path
+    get wow_path
 
     assert_select ".site-search", false
     assert_select ".realm-button", false
@@ -985,18 +997,18 @@ class PagesTest < ActionDispatch::IntegrationTest
   test "an old market address leads to a realm of it, the player's own if it is one" do
     seed_item
 
-    get "/markets/#{@market.id}"
+    get "/wow/markets/#{@market.id}"
     assert_response :moved_permanently
     assert_redirected_to home
 
     get home(@connected)
-    get "/markets/#{@market.id}/items/2589?variant=pet:39&period=30d"
+    get "/wow/markets/#{@market.id}/items/2589?variant=pet:39&period=30d"
     assert_redirected_to item_page(2589, @connected, variant: "pet:39", period: "30d")
 
-    get "/markets/#{@market.id}/deals"
+    get "/wow/markets/#{@market.id}/deals"
     assert_redirected_to deals_page(@connected)
 
-    get "/markets/#{@market.id}/items/2589.csv"
+    get "/wow/markets/#{@market.id}/items/2589.csv"
     assert_redirected_to item_page(2589, @connected, format: :csv)
   end
 
@@ -1004,28 +1016,28 @@ class PagesTest < ActionDispatch::IntegrationTest
     seed_item
     commodities = seed_commodity
 
-    get "/markets/#{commodities.id}/items/2770"
+    get "/wow/markets/#{commodities.id}/items/2770"
     assert_redirected_to realms_path(item: 2770)
 
     get home
-    get "/markets/#{commodities.id}/items/2770"
+    get "/wow/markets/#{commodities.id}/items/2770"
     assert_redirected_to item_page(2770)
   end
 
   test "old search and list addresses still lead somewhere" do
     seed_item
 
-    get "/markets"
+    get "/wow/markets"
     assert_redirected_to realms_path
 
-    get "/search?q=linen"
+    get "/wow/search?q=linen"
     assert_redirected_to realms_path
 
     get home
-    get "/search?q=linen"
+    get "/wow/search?q=linen"
     assert_redirected_to search_page(q: "linen")
 
-    get "/markets/0"
+    get "/wow/markets/0"
     assert_response :not_found
   end
 end

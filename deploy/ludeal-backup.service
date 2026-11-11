@@ -1,6 +1,6 @@
-# Saves what cannot be fetched again, started by wow-trading-backup.timer. See deploy/README.md.
+# Saves what cannot be fetched again, started by ludeal-backup.timer. See deploy/README.md.
 [Unit]
-Description=WoW Trading: back up the accounts and the long-term market history
+Description=Ludeal: back up the accounts and the long-term market history
 After=postgresql.service
 Requires=postgresql.service
 
@@ -9,7 +9,7 @@ Type=oneshot
 # Reaches every database without a password, over the local socket.
 User=postgres
 Group=postgres
-ExecStart=/opt/wow-trading/bin/backup.sh
+ExecStart=/opt/ludeal/bin/backup.sh
 TimeoutStartSec=2h
 
 # Leave room for the site, which readers are waiting on.
@@ -22,7 +22,7 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/backups/wow-trading
+ReadWritePaths=/var/backups/ludeal
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

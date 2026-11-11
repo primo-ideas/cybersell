@@ -3,6 +3,6 @@ class AccountMailer < ApplicationMailer
   def email_confirmation(user)
     @user = user
     @url = confirm_email_account_url(token: user.generate_token_for(:email_confirmation))
-    mail to: user.email, subject: "Confirm your address for WoW Trading alerts"
+    mail to: user.email, subject: "Confirm your address for Ludeal alerts"
   end
 end

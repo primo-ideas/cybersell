@@ -4,7 +4,7 @@
 Fetches the WoW auction data, starts the local site and opens it in the browser.
 
 .DESCRIPTION
-On first use, installs Postgres and Ruby in %LOCALAPPDATA%\wow-trading, without
+On first use, installs Postgres and Ruby in %LOCALAPPDATA%\ludeal, without
 admin rights and without touching the PATH or creating a service. Then starts
 Postgres, runs one fetch cycle, starts the site, opens the browser, and keeps
 fetching until Ctrl-C. Everything this script started is stopped when it exits.
@@ -54,7 +54,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $Repo = $PSScriptRoot
-$Home_ = Join-Path $env:LOCALAPPDATA 'wow-trading'
+$Home_ = Join-Path $env:LOCALAPPDATA 'ludeal'
 $Downloads = Join-Path $Home_ 'downloads'
 $Logs = Join-Path $Home_ 'logs'
 $PgRoot = Join-Path $Home_ 'postgres'
@@ -65,9 +65,9 @@ $RubyRoot = Join-Path $Home_ 'ruby'
 $Web = Join-Path $Repo 'web'
 
 $PgPort = 54329
-$PgUser = 'wowtrading'
-$Database = 'wow_trading'
-$AccountsDatabase = 'wow_trading_accounts'
+$PgUser = 'ludeal'
+$Database = 'ludeal_wow'
+$AccountsDatabase = 'ludeal_accounts'
 $BuildJobs = 4
 # How often to look for products that reached their target price, once running.
 $AlertsEveryMinutes = 10
@@ -296,8 +296,8 @@ function Stop-IfRunning([Diagnostics.Process] $Process) {
 
 function Invoke-Tests {
     Write-Step 'Testing the fetcher'
-    New-DatabaseIfMissing 'wow_trading_fetcher_test'
-    $env:DATABASE_URL = Get-DatabaseUrl 'wow_trading_fetcher_test'
+    New-DatabaseIfMissing 'ludeal_wow_fetcher_test'
+    $env:DATABASE_URL = Get-DatabaseUrl 'ludeal_wow_fetcher_test'
     Push-Location $Repo
     try {
         Invoke-Checked 'cargo' @('test', '--workspace', '--jobs', "$BuildJobs", '--', "--test-threads=$BuildJobs")
@@ -308,10 +308,10 @@ function Invoke-Tests {
 
     Write-Step 'Testing the site'
     Install-WebDependencies
-    New-DatabaseIfMissing 'wow_trading_site_test'
-    New-DatabaseIfMissing 'wow_trading_accounts_test'
-    $env:DATABASE_URL = Get-DatabaseUrl 'wow_trading_site_test'
-    $env:ACCOUNTS_DATABASE_URL = Get-DatabaseUrl 'wow_trading_accounts_test'
+    New-DatabaseIfMissing 'ludeal_site_test'
+    New-DatabaseIfMissing 'ludeal_accounts_test'
+    $env:DATABASE_URL = Get-DatabaseUrl 'ludeal_site_test'
+    $env:ACCOUNTS_DATABASE_URL = Get-DatabaseUrl 'ludeal_accounts_test'
     Push-Location $Web
     try {
         Invoke-Checked 'ruby' @('bin/rails', 'test')
@@ -428,12 +428,12 @@ try {
     Write-Step 'Building the fetcher'
     Push-Location $Repo
     try {
-        Invoke-Checked 'cargo' @('build', '--release', '--quiet', '--jobs', "$BuildJobs", '-p', 'wow-trading-fetcher')
+        Invoke-Checked 'cargo' @('build', '--release', '--quiet', '--jobs', "$BuildJobs", '-p', 'ludeal-wow-fetcher')
     }
     finally {
         Pop-Location
     }
-    $fetcher = Join-Path $Repo 'target\release\wow-trading-fetcher.exe'
+    $fetcher = Join-Path $Repo 'target\release\ludeal-wow-fetcher.exe'
     $fetcherArguments = $configArguments + $scopeArguments + $stubArguments
 
     Install-WebDependencies
@@ -449,7 +449,7 @@ try {
     Initialize-AccountsDatabase ($Stub ? "${AccountsDatabase}_stub" : $AccountsDatabase) $siteDatabaseUrl
     Set-SiteCredentials
     # No Battle.net needed to try accounts on sample data: see SessionsController.
-    if ($Stub) { $env:WOW_TRADING_STUB_SIGN_IN = '1' }
+    if ($Stub) { $env:LUDEAL_STUB_SIGN_IN = '1' }
 
     $env:DATABASE_URL = $siteDatabaseUrl
     $site = Start-Site

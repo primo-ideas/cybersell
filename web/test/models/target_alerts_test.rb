@@ -39,7 +39,7 @@ class TargetAlertsTest < ActiveSupport::TestCase
     assert_equal [ "thrall@example.com" ], mail.to
     assert_match "2 products are at your target price on Hyjal", mail.subject
     assert_match "Linen Cloth", mail.text_part.body.to_s
-    assert_match "/eu/hyjal/items/2589", mail.html_part.body.to_s
+    assert_match "/wow/eu/hyjal/items/2589", mail.html_part.body.to_s
     assert_match "alerts/unsubscribe", mail["List-Unsubscribe"].value
     assert_equal "List-Unsubscribe=One-Click", mail["List-Unsubscribe-Post"].value
   end

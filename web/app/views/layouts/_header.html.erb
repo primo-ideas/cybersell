@@ -1,7 +1,8 @@
 <header class="site-header">
   <%= link_to root_path, class: "brand" do %>
-    <i class="coin coin-g" aria-hidden="true"></i>WoW Trading
+    <i class="coin coin-g" aria-hidden="true"></i>Ludeal
   <% end %>
+  <%= link_to "WoW", wow_path, class: "game-link", data: { tip: "World of Warcraft" }, "aria-label": "World of Warcraft" %>
 
   <% if current_realm %>
     <%= link_to realms_path(item: @item&.id, variant: @variant.presence), class: "realm-button",

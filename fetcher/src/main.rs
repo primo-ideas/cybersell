@@ -8,13 +8,13 @@ use chrono::Utc;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
-use wow_trading_fetcher::api::AuctionApi;
-use wow_trading_fetcher::api::blizzard::{BlizzardClient, Credentials, Endpoints, RetryPolicy};
-use wow_trading_fetcher::api::stub::StubApi;
-use wow_trading_fetcher::config::{Region, RealmSelection, Scope};
-use wow_trading_fetcher::pipeline::{FetchOptions, Fetcher, RegionSource};
-use wow_trading_fetcher::simulation::Simulation;
-use wow_trading_fetcher::store::Store;
+use ludeal_wow_fetcher::api::AuctionApi;
+use ludeal_wow_fetcher::api::blizzard::{BlizzardClient, Credentials, Endpoints, RetryPolicy};
+use ludeal_wow_fetcher::api::stub::StubApi;
+use ludeal_wow_fetcher::config::{Region, RealmSelection, Scope};
+use ludeal_wow_fetcher::pipeline::{FetchOptions, Fetcher, RegionSource};
+use ludeal_wow_fetcher::simulation::Simulation;
+use ludeal_wow_fetcher::store::Store;
 
 const STUB_HISTORY_HOURS: i64 = 7 * 24;
 /// Added to the database name with `--stub`: sample data must never end up in the
