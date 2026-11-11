@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the run of the previous one pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PGPASSWORD: postgres
+
+jobs:
+  fetcher:
+    name: Fetcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        # The version run.ps1 installs.
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          # sqlx::test connects here to create one database per test.
+          POSTGRES_DB: wow_trading_fetcher_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/wow_trading_fetcher_test
+    steps:
+      - uses: actions/checkout@v7
+
+      # The version comes from rust-toolchain.toml.
+      - name: Install Rust
+        run: rustup component add clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace --locked
+
+  site:
+    name: Site
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wow_trading_site_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: web
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/wow_trading_site_test
+      ACCOUNTS_DATABASE_URL: postgres://postgres:postgres@localhost:5432/wow_trading_accounts_test
+    steps:
+      - uses: actions/checkout@v7
+
+      # The version comes from web/.ruby-version.
+      - uses: ruby/setup-ruby@v1
+        with:
+          working-directory: web
+          bundler-cache: true
+
+      # The tests build both schemas themselves, but in databases that exist.
+      - name: Create the accounts database
+        run: createdb -h localhost -U postgres wow_trading_accounts_test
+
+      - name: Tests
+        run: bin/rails test
+
+  deploy-scripts:
+    name: Deploy scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Syntax
+        run: |
+          for script in deploy/*.sh; do
+            bash -n "$script"
+          done
