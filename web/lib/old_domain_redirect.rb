@@ -8,7 +8,7 @@ class OldDomainRedirect
   SITE_WIDE = %w[account sign-in sign-out auth alerts up assets].freeze
 
   # `hosts`: the old domains, separated by commas. `site`: where the site is now, like
-  # https://example.com/ludeal. Without either, nothing is redirected.
+  # https://example.com/playdeals. Without either, nothing is redirected.
   def initialize(app, hosts:, site:)
     @app = app
     @hosts = hosts.to_s.downcase.split(",").map(&:strip).reject(&:empty?)

@@ -1,7 +1,7 @@
 require "test_helper"
 
 class OldDomainRedirectTest < ActiveSupport::TestCase
-  SITE = "https://example.com/ludeal".freeze
+  SITE = "https://example.com/playdeals".freeze
 
   def get(url, hosts: "wow.example, old.example", site: SITE, **headers)
     inner = ->(_env) { [ 200, {}, [ "the site" ] ] }
@@ -35,7 +35,7 @@ class OldDomainRedirectTest < ActiveSupport::TestCase
   end
 
   test "the site itself, and a setup without an old domain, are left alone" do
-    assert_equal "the site", get("http://example.com/ludeal/wow").body
+    assert_equal "the site", get("http://example.com/playdeals/wow").body
     assert_equal "the site", get("http://wow.example/eu/hyjal", hosts: nil).body
     assert_equal "the site", get("http://wow.example/eu/hyjal", hosts: " , ").body
     assert_equal "the site", get("http://wow.example/eu/hyjal", site: "").body

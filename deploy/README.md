@@ -2,15 +2,15 @@
 
 For a small Ubuntu 26.04 server, for example a Scaleway instance. A single script installs everything: Postgres, the fetcher and its timer, the site, and Caddy for HTTPS if you give it a domain.
 
-> **Run on one server so far,** under Ubuntu 26.04 with Apache already in front. Installing Caddy, on a server without Apache, has not been tried, nor have alerts through an SMTP server. [Renaming an install](#updating-an-install-from-before-a-rename) has run there once, from wow-trading. The script is written to be safely run again: if it fails, fix the cause and run it again.
+> **Run on one server so far,** under Ubuntu 26.04 with Apache already in front. Installing Caddy, on a server without Apache, has not been tried, nor have alerts through an SMTP server. [Renaming an install](#updating-an-install-from-before-a-rename) has run there twice, from wow-trading then from Ludeal. The script is written to be safely run again: if it fails, fix the cause and run it again.
 
 ## Install
 
 Plan for about 20 GB of disk for the commodities and one realm, compilation included. The repository must be reachable from the server.
 
 ```sh
-git clone <repository-url> ludeal
-cd ludeal
+git clone <repository-url> playdeals
+cd playdeals
 sudo SCOPE=eu/commodities,eu/hyjal ./deploy/install.sh
 ```
 
@@ -22,14 +22,14 @@ It then stops and asks for the Battle.net credentials:
 2. Fill in `BLIZZARD_CLIENT_ID` and `BLIZZARD_CLIENT_SECRET`, without quotes:
 
    ```sh
-   sudo nano /etc/ludeal/fetcher.env
+   sudo nano /etc/playdeals/fetcher.env
    ```
 
 3. Start it, then check:
 
    ```sh
-   sudo systemctl enable --now ludeal-wow-fetcher.timer
-   sudo systemctl start --no-block ludeal-wow-fetcher.service
+   sudo systemctl enable --now playdeals-wow-fetcher.timer
+   sudo systemctl start --no-block playdeals-wow-fetcher.service
    sudo ./deploy/install.sh
    sudo ./deploy/check.sh
    ```
@@ -56,10 +56,10 @@ Once public, anyone can read the market pages: accounts are optional, and only h
 
 ### Next to other sites
 
-If the domain serves other things, give the site a path of its own. Where Apache already runs, with a certificate for that domain, the script adds a route to it in `/etc/apache2/conf-available/ludeal.conf`, and neither installs Caddy nor changes anything else:
+If the domain serves other things, give the site a path of its own. Where Apache already runs, with a certificate for that domain, the script adds a route to it in `/etc/apache2/conf-available/playdeals.conf`, and neither installs Caddy nor changes anything else:
 
 ```sh
-sudo DOMAIN=example.com BASE_PATH=/ludeal ./deploy/install.sh
+sudo DOMAIN=example.com BASE_PATH=/playdeals ./deploy/install.sh
 ```
 
 That route applies to every domain Apache serves on the server, which is why it only ever claims a path. To give the site a domain of its own on such a server, give that domain an Apache virtual host that sends everything to the site, for example with `ProxyPass / http://127.0.0.1:3000/` next to the certificate Certbot adds, then run the script with `DOMAIN` alone. It checks that virtual host, leaves it as it is, and removes the route of an earlier run on a path:
@@ -68,14 +68,24 @@ That route applies to every domain Apache serves on the server, which is why it 
 sudo DOMAIN=trading.example.com ./deploy/install.sh
 ```
 
-The script remembers `DOMAIN`, `BASE_PATH` and `WOW_DOMAIN` for the next runs. A path of `/` counts as none.
+The script remembers `DOMAIN`, `BASE_PATH`, `OLD_BASE_PATH` and `WOW_DOMAIN` for the next runs. A path of `/` counts as none.
+
+### A path the site used to have
+
+When the site moves to another path of the same domain, name the old one, and Apache redirects each of its addresses to the same page under the new path, query included:
+
+```sh
+sudo DOMAIN=example.com BASE_PATH=/playdeals OLD_BASE_PATH=/ludeal ./deploy/install.sh
+```
+
+Several paths are separated by commas. This only works with `BASE_PATH`, through the route the script gives Apache, and `check.sh` says whether it works. For players to keep signing in, add the new [redirect URL](#accounts) to the Battle.net client.
 
 ### A domain the World of Warcraft pages had to themselves
 
 Before the site covered several games, its World of Warcraft pages could be a whole domain, with `/eu/hyjal` where the site now has `/wow/eu/hyjal`. Name that domain, and the site redirects each of its addresses to the same page under `DOMAIN`, so that links and bookmarks keep working:
 
 ```sh
-sudo DOMAIN=example.com BASE_PATH=/ludeal WOW_DOMAIN=trading.example.com ./deploy/install.sh
+sudo DOMAIN=example.com BASE_PATH=/playdeals WOW_DOMAIN=trading.example.com ./deploy/install.sh
 ```
 
 Whatever serves the old domain must still send all of it to the site, as it did until then: with Apache, a virtual host with its certificate and `ProxyPass / http://127.0.0.1:3000/`. The script does not touch it, and `check.sh` says whether the redirect works. Several domains are separated by commas.
@@ -89,11 +99,11 @@ Battle.net and GitHub have no IPv6 address. Without an IPv4 address on the serve
 To install or update such a server, send the code from your computer rather than cloning it:
 
 ```sh
-git bundle create - HEAD | ssh root@server 'cat > ludeal.bundle'
-ssh root@server 'git clone ludeal.bundle ludeal'
+git bundle create - HEAD | ssh root@server 'cat > playdeals.bundle'
+ssh root@server 'git clone playdeals.bundle playdeals'
 ```
 
-For an update, replace the second command with `git -C ludeal pull ../ludeal.bundle HEAD`.
+For an update, replace the second command with `git -C playdeals pull ../playdeals.bundle HEAD`.
 
 ## When the fetcher runs
 
@@ -128,7 +138,7 @@ These figures come from real snapshots of `eu/commodities` and `eu/hyjal`, and a
 
 On a disk under 16 GB, the script adapts: 1 GB of swap instead of 2, less write-ahead log, 7 days of hourly detail, and it removes the Rust compiler and its output once the fetcher is built. They come back at the next update of the fetcher, which then takes as long as the first build.
 
-If disk runs short, lower `WOW_HOURLY_RETENTION_DAYS` in `/etc/ludeal/fetcher.env`: 7 halves the hourly detail. The fetcher no longer runs when less than 1 GB is free, so that Postgres and the site keep working, and `check.sh` reports it.
+If disk runs short, lower `WOW_HOURLY_RETENTION_DAYS` in `/etc/playdeals/fetcher.env`: 7 halves the hourly detail. The fetcher no longer runs when less than 1 GB is free, so that Postgres and the site keep working, and `check.sh` reports it.
 
 ## Accounts
 
@@ -140,29 +150,29 @@ https://trading.example.com/auth/battlenet/callback
 
 With `BASE_PATH`, the path comes before `/auth`. It changes with the domain and the path of the site: after moving it, add the new one. Without this URL, Battle.net refuses to send players back to the site. The whole of the site still works without an account.
 
-What players save is in the `ludeal_accounts` database. Nothing there can be fetched again: see [Backups](#backups).
+What players save is in the `playdeals_accounts` database. Nothing there can be fetched again: see [Backups](#backups).
 
 ### Alerts by email
 
-The site only offers alerts once it can send emails. Uncomment and fill in `SMTP_ADDRESS` and the lines under it in `/etc/ludeal/site.env`, with the details your email provider gives, then run `sudo ./deploy/install.sh` again. That starts `ludeal-alerts.timer`, which looks for products that reached their target 2 minutes after each cycle of the fetcher. Check how your provider limits sending: each player gets at most one email per run.
+The site only offers alerts once it can send emails. Uncomment and fill in `SMTP_ADDRESS` and the lines under it in `/etc/playdeals/site.env`, with the details your email provider gives, then run `sudo ./deploy/install.sh` again. That starts `playdeals-alerts.timer`, which looks for products that reached their target 2 minutes after each cycle of the fetcher. Check how your provider limits sending: each player gets at most one email per run.
 
 ## Day to day
 
 | To | Command |
 | --- | --- |
 | Know if all is well | `sudo ./deploy/check.sh` |
-| Read the fetcher's logs | `journalctl -u ludeal-wow-fetcher.service -f` |
-| Read the site's logs | `journalctl -u ludeal-site.service -f` |
-| Run a cycle right now | `sudo systemctl start --no-block ludeal-wow-fetcher.service` |
-| Pause the fetcher | `sudo systemctl stop ludeal-wow-fetcher.timer` |
+| Read the fetcher's logs | `journalctl -u playdeals-wow-fetcher.service -f` |
+| Read the site's logs | `journalctl -u playdeals-site.service -f` |
+| Run a cycle right now | `sudo systemctl start --no-block playdeals-wow-fetcher.service` |
+| Pause the fetcher | `sudo systemctl stop playdeals-wow-fetcher.timer` |
 | Update | `git pull && sudo ./deploy/install.sh` |
-| Follow other markets | Change `WOW_SCOPE` in `/etc/ludeal/fetcher.env`, taken into account at the next cycle |
-| Read the alerts' logs | `journalctl -u ludeal-alerts.service -f` |
-| Back up right now | `sudo systemctl start ludeal-backup.service` |
+| Follow other markets | Change `WOW_SCOPE` in `/etc/playdeals/fetcher.env`, taken into account at the next cycle |
+| Read the alerts' logs | `journalctl -u playdeals-alerts.service -f` |
+| Back up right now | `sudo systemctl start playdeals-backup.service` |
 
 ### Backups
 
-Each night at 03:40 UTC, `ludeal-backup.timer` saves what cannot be fetched again in `/var/backups/ludeal`. `install.sh` also takes one before each update.
+Each night at 03:40 UTC, `playdeals-backup.timer` saves what cannot be fetched again in `/var/backups/playdeals`. `install.sh` also takes one before each update.
 
 - `accounts-<day>.dump`: the whole of the accounts database. It is small, and 14 days of it are kept, to go back to before a mistake.
 - `market-<day>.dump`: the market data without the hourly detail of the last days, nor what the fetcher works out again at its next snapshot. That leaves the names of items, realms and markets, the log of snapshots and the daily history. It starts at about a megabyte, then grows with each day of history, which is never purged. Each copy holds the whole of that history, so only the two latest are kept. Restored, it loses at most the hours not yet rolled up into days, `WOW_HOURLY_RETENTION_DAYS` at worst.
@@ -172,9 +182,9 @@ Each night at 03:40 UTC, `ludeal-backup.timer` saves what cannot be fetched agai
 To restore, with the services stopped so that nothing is connected meanwhile. Each command replaces a whole database, with its owner and settings, by the one in the file:
 
 ```sh
-sudo systemctl stop ludeal-site.service ludeal-wow-fetcher.timer ludeal-wow-fetcher.service ludeal-alerts.timer ludeal-alerts.service
-sudo -u postgres pg_restore --clean --if-exists --create -d postgres /var/backups/ludeal/accounts-<day>.dump
-sudo -u postgres pg_restore --clean --if-exists --create -d postgres /var/backups/ludeal/market-<day>.dump
+sudo systemctl stop playdeals-site.service playdeals-wow-fetcher.timer playdeals-wow-fetcher.service playdeals-alerts.timer playdeals-alerts.service
+sudo -u postgres pg_restore --clean --if-exists --create -d postgres /var/backups/playdeals/accounts-<day>.dump
+sudo -u postgres pg_restore --clean --if-exists --create -d postgres /var/backups/playdeals/market-<day>.dump
 sudo ./deploy/install.sh
 ```
 
@@ -184,18 +194,22 @@ The fetcher fills in the latest snapshot at its next cycle, so curves and listin
 
 ### Updating an install from before a rename
 
-The project used to be called wow-market, then wow-trading. On a server installed under one of those names, `install.sh` renames the install before updating it: the services, the system user, the directories in `/opt`, `/etc` and `/var/backups`, the databases and their roles. The history, the accounts and the credentials are kept. A `git pull` still works, as GitHub redirects the old address.
+The project used to be called wow-market, then wow-trading, then Ludeal. On a server installed under one of those names, `install.sh` renames the install before updating it: the services, the system user, the directories in `/opt`, `/etc` and `/var/backups`, the databases and their roles. The history, the accounts and the credentials are kept. A `git pull` still works, as GitHub redirects the old address.
 
 It stops the old services first, so the site is down for the length of the update, and longer the first time: the fetcher has a new name too, and is compiled again.
 
-The old install's `DOMAIN` and `BASE_PATH` are kept as well. To move the site while renaming it, pass the new ones, with the old domain as [`WOW_DOMAIN`](#a-domain-the-world-of-warcraft-pages-had-to-themselves) if it had one.
-
-A backup taken before the rename restores its database under the name it had then. Rename it before running `install.sh`, for example with `ALTER DATABASE wow_trading RENAME TO ludeal_wow`, and `wow_trading_accounts` to `ludeal_accounts`.
-
-Item names already stored stay in the language they were fetched in, and an existing `fetcher.env` keeps its `WOW_LOCALE`. To change language, set `WOW_LOCALE` in `/etc/ludeal/fetcher.env`, then forget the stored names:
+The old install's `DOMAIN` and `BASE_PATH` are kept as well. To move the site while renaming it, pass the new ones, with the old path as [`OLD_BASE_PATH`](#a-path-the-site-used-to-have), or the old domain as [`WOW_DOMAIN`](#a-domain-the-world-of-warcraft-pages-had-to-themselves) if it had one. From Ludeal, on a shared domain:
 
 ```sh
-sudo -u postgres psql -d ludeal_wow -c "UPDATE items SET name = NULL, resolved_at = NULL; UPDATE pets SET name = NULL, resolved_at = NULL;"
+sudo BASE_PATH=/playdeals OLD_BASE_PATH=/ludeal ./deploy/install.sh
+```
+
+A backup taken before the rename restores its database under the name it had then. Rename it before running `install.sh`, for example with `ALTER DATABASE ludeal_wow RENAME TO playdeals_wow`, and `ludeal_accounts` to `playdeals_accounts`.
+
+Item names already stored stay in the language they were fetched in, and an existing `fetcher.env` keeps its `WOW_LOCALE`. To change language, set `WOW_LOCALE` in `/etc/playdeals/fetcher.env`, then forget the stored names:
+
+```sh
+sudo -u postgres psql -d playdeals_wow -c "UPDATE items SET name = NULL, resolved_at = NULL; UPDATE pets SET name = NULL, resolved_at = NULL;"
 ```
 
 The fetcher looks them up again at 1,000 per cycle, which takes about 2 hours for 25,000 items. Until then they show as `Item #…`.
@@ -204,10 +218,10 @@ The fetcher looks them up again at 1,000 per cycle, which takes about 2 hours fo
 
 | What | Where |
 | --- | --- |
-| Programs | `/opt/ludeal` |
-| Credentials and settings, readable by root and `ludeal` only | `/etc/ludeal/fetcher.env`, `/etc/ludeal/site.env` |
-| System user | `ludeal` |
-| Postgres databases and roles | `ludeal_wow`, `ludeal` (owner, for the fetcher), `ludeal_site` (read only there, for the site); `ludeal_accounts`, owned by `ludeal_site` |
-| systemd units | `ludeal-wow-fetcher.service`, `ludeal-wow-fetcher.timer`, `ludeal-site.service`, `ludeal-alerts.service`, `ludeal-alerts.timer`, `ludeal-backup.service`, `ludeal-backup.timer` |
-| Backups, readable by `postgres` only | `/var/backups/ludeal` |
-| With a domain | `/etc/caddy/Caddyfile`, the previous one being kept as `Caddyfile.before-ludeal` |
+| Programs | `/opt/playdeals` |
+| Credentials and settings, readable by root and `playdeals` only | `/etc/playdeals/fetcher.env`, `/etc/playdeals/site.env` |
+| System user | `playdeals` |
+| Postgres databases and roles | `playdeals_wow`, `playdeals` (owner, for the fetcher), `playdeals_site` (read only there, for the site); `playdeals_accounts`, owned by `playdeals_site` |
+| systemd units | `playdeals-wow-fetcher.service`, `playdeals-wow-fetcher.timer`, `playdeals-site.service`, `playdeals-alerts.service`, `playdeals-alerts.timer`, `playdeals-backup.service`, `playdeals-backup.timer` |
+| Backups, readable by `postgres` only | `/var/backups/playdeals` |
+| With a domain | `/etc/caddy/Caddyfile`, the previous one being kept as `Caddyfile.before-playdeals` |

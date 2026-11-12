@@ -4,14 +4,14 @@
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use sqlx::PgPool;
 
-use ludeal_wow_fetcher::aggregate::{Aggregate, PricePoint, aggregate};
-use ludeal_wow_fetcher::api::stub::StubApi;
-use ludeal_wow_fetcher::api::{Auction, AuctionItem, AuctionSource};
-use ludeal_wow_fetcher::config::{RealmSelection, Region};
-use ludeal_wow_fetcher::pipeline::{CycleReport, FetchOptions, Fetcher, RegionSource};
-use ludeal_wow_fetcher::sales::{SalesPoint, TimeLeft};
-use ludeal_wow_fetcher::simulation::Simulation;
-use ludeal_wow_fetcher::store::{NewSnapshot, Store};
+use playdeals_wow_fetcher::aggregate::{Aggregate, PricePoint, aggregate};
+use playdeals_wow_fetcher::api::stub::StubApi;
+use playdeals_wow_fetcher::api::{Auction, AuctionItem, AuctionSource};
+use playdeals_wow_fetcher::config::{RealmSelection, Region};
+use playdeals_wow_fetcher::pipeline::{CycleReport, FetchOptions, Fetcher, RegionSource};
+use playdeals_wow_fetcher::sales::{SalesPoint, TimeLeft};
+use playdeals_wow_fetcher::simulation::Simulation;
+use playdeals_wow_fetcher::store::{NewSnapshot, Store};
 
 const LATER: &str = "Thu, 05 Nov 2026 06:00:00 GMT";
 const EARLIER: &str = "Thu, 05 Nov 2026 04:00:00 GMT";
@@ -1244,7 +1244,7 @@ async fn a_simulated_week_gives_curves_and_sales(pool: PgPool) {
 async fn opening_creates_the_database_and_can_be_repeated() {
     let server = std::env::var("DATABASE_URL").expect("the tests need DATABASE_URL");
     let (base, _) = server.rsplit_once('/').unwrap();
-    let name = format!("ludeal_wow_open_test_{}", std::process::id());
+    let name = format!("playdeals_wow_open_test_{}", std::process::id());
     let url = format!("{base}/{name}");
     let cleanup = |url: String| async move {
         use sqlx::migrate::MigrateDatabase;

@@ -1,7 +1,7 @@
 # A backup each night, when the fewest players are about in Europe. A night the server was
 # off is made up for when it comes back.
 [Unit]
-Description=Ludeal: back up every night
+Description=Play Deals: back up every night
 
 [Timer]
 OnCalendar=*-*-* 03:40:00 UTC

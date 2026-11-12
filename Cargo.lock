@@ -1248,26 +1248,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
 
 [[package]]
-name = "ludeal-wow-fetcher"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "dotenvy",
- "futures",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "wiremock",
-]
-
-[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1417,6 +1397,26 @@ name = "pkg-config"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
+
+[[package]]
+name = "playdeals-wow-fetcher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "dotenvy",
+ "futures",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "wiremock",
+]
 
 [[package]]
 name = "potential_utf"

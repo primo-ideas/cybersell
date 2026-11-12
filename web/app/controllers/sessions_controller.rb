@@ -95,6 +95,6 @@ class SessionsController < ApplicationController
 
   # Only in development, and only when asked for: run.ps1 -Stub does, as its data is fake.
   def stub_sign_in?
-    Rails.env.local? && ENV["LUDEAL_STUB_SIGN_IN"] == "1"
+    Rails.env.local? && ENV["PLAYDEALS_STUB_SIGN_IN"] == "1"
   end
 end

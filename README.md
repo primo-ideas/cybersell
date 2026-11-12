@@ -1,10 +1,15 @@
-# Ludeal
+# Play Deals
+
+[![CI](https://github.com/primo-ideas/playdeals-io/actions/workflows/ci.yml/badge.svg)](https://github.com/primo-ideas/playdeals-io/actions/workflows/ci.yml)
+
+**[primo-ideas.xyz/playdeals](https://primo-ideas.xyz/playdeals/)**, soon on its own domain, playdeals.io.
 
 What things sell for in games: price curves and estimated sales, game by game. World of Warcraft's auction house is the only game so far; the site is laid out for more, each in a section of its own.
 
 - [`fetcher/`](fetcher/): collects World of Warcraft auctions from the Battle.net API and stores statistics in Postgres (Rust).
 - [`web/`](web/): the site, which reads that database and never writes to it, and keeps players' accounts in a database of its own (Rails).
 - [`deploy/`](deploy/): installation on an Ubuntu server, see [its guide](deploy/README.md).
+- [`docs/`](docs/): what the project is and was called, see [its index](docs/README.md).
 
 ## Try it without credentials
 
@@ -14,9 +19,9 @@ On Windows, with [PowerShell 7.2 or later](https://github.com/PowerShell/PowerSh
 ./run.ps1 -Stub
 ```
 
-On first use, the script installs Postgres and Ruby in `%LOCALAPPDATA%\ludeal`, without admin rights, without touching the `PATH` and without creating a service. It then simulates a week of auctions, starts the site on <http://127.0.0.1:3000> and opens the browser. Ctrl-C stops everything it started.
+On first use, the script installs Postgres and Ruby in `%LOCALAPPDATA%\playdeals`, without admin rights, without touching the `PATH` and without creating a service. It then simulates a week of auctions, starts the site on <http://127.0.0.1:3000> and opens the browser. Ctrl-C stops everything it started.
 
-`-Stub` writes to a separate database, `ludeal_wow_stub`: fake data cannot mix with the real history. It also offers to sign in as a test player, without Battle.net.
+`-Stub` writes to a separate database, `playdeals_wow_stub`: fake data cannot mix with the real history. It also offers to sign in as a test player, without Battle.net.
 
 ## Connect Battle.net
 
@@ -51,13 +56,13 @@ On Ubuntu 26.04, `deploy/install.sh` installs everything, with the fetcher on a 
 The script only works on Windows. Elsewhere, with a Postgres server and Ruby already installed (these commands have not been tested outside Windows):
 
 ```sh
-export DATABASE_URL=postgres://user:password@localhost:5432/ludeal_wow
-cargo run -p ludeal-wow-fetcher -- --stub once
+export DATABASE_URL=postgres://user:password@localhost:5432/playdeals_wow
+cargo run -p playdeals-wow-fetcher -- --stub once
 
 cd web
 bundle install
-export DATABASE_URL=postgres://user:password@localhost:5432/ludeal_wow_stub
-export ACCOUNTS_DATABASE_URL=postgres://user:password@localhost:5432/ludeal_accounts
+export DATABASE_URL=postgres://user:password@localhost:5432/playdeals_wow_stub
+export ACCOUNTS_DATABASE_URL=postgres://user:password@localhost:5432/playdeals_accounts
 bin/rails db:prepare
 bin/rails server
 ```
@@ -67,8 +72,8 @@ The fetcher creates the database if it does not exist and applies its own migrat
 ## Fetcher
 
 ```sh
-cargo run -p ludeal-wow-fetcher -- once    # one cycle, exit code 2 if a market failed
-cargo run -p ludeal-wow-fetcher -- watch   # one cycle every 10 minutes, until Ctrl-C
+cargo run -p playdeals-wow-fetcher -- once    # one cycle, exit code 2 if a market failed
+cargo run -p playdeals-wow-fetcher -- watch   # one cycle every 10 minutes, until Ctrl-C
 ```
 
 Each option can be passed on the command line or as an environment variable, possibly in `.env`. A variable already set in the environment wins over the file.

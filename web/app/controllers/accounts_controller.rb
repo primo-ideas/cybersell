@@ -27,7 +27,7 @@ class AccountsController < ApplicationController
 
   def export
     send_data JSON.pretty_generate(current_user.export), type: "application/json",
-      filename: "ludeal-#{current_user.battletag.parameterize}-#{Date.current.iso8601}.json"
+      filename: "playdeals-#{current_user.battletag.parameterize}-#{Date.current.iso8601}.json"
   end
 
   # Everything goes, at once: lists, trades, preferences and every browser signed in.

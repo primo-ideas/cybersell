@@ -204,7 +204,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
   end
 
   test "the test player signs in without Battle.net when asked for" do
-    ENV["LUDEAL_STUB_SIGN_IN"] = "1"
+    ENV["PLAYDEALS_STUB_SIGN_IN"] = "1"
     BattleNet.client = BattleNet.new("", "")
 
     get sign_in_path
@@ -216,7 +216,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
     assert_equal "TestPlayer#1234", User.first.battletag
     assert_equal [ "hyjal" ], User.first.characters.map(&:realm_slug)
   ensure
-    ENV.delete("LUDEAL_STUB_SIGN_IN")
+    ENV.delete("PLAYDEALS_STUB_SIGN_IN")
   end
 
   # Lists
@@ -734,7 +734,7 @@ class AccountsTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "application/json", response.media_type
-    assert_match(/attachment; filename="ludeal-thrall-1234-/, response.headers["Content-Disposition"])
+    assert_match(/attachment; filename="playdeals-thrall-1234-/, response.headers["Content-Disposition"])
     assert_equal "Keep", JSON.parse(response.body).dig("lists", 0, "products", 0, "note")
   end
 

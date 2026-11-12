@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 #
-# Installs or updates Ludeal on Ubuntu 26.04: Postgres, the fetcher on a systemd
+# Installs or updates Play Deals on Ubuntu 26.04: Postgres, the fetcher on a systemd
 # timer, the site, and Caddy if given a domain. Safe to run again after a `git pull`.
 #
 #   sudo ./deploy/install.sh                                # site on 127.0.0.1:3000
 #   sudo DOMAIN=trading.example.com ./deploy/install.sh     # site on https://trading.example.com
-#   sudo DOMAIN=example.com BASE_PATH=/ludeal ./deploy/install.sh     # next to other sites
+#   sudo DOMAIN=example.com BASE_PATH=/playdeals ./deploy/install.sh     # next to other sites
 #
-# Options, as environment variables. DOMAIN, BASE_PATH and WOW_DOMAIN are kept for the
-# next runs:
+# Options, as environment variables. DOMAIN, BASE_PATH, OLD_BASE_PATH and WOW_DOMAIN are
+# kept for the next runs:
 #   DOMAIN        Public domain of the site. Its DNS must already point to this server.
 #   BASE_PATH     Path of the site on that domain, when it shares it. Where Apache already
 #                 runs, that path gets a route to the site, and nothing else changes. Without
 #                 one, the Apache virtual host of the domain must send it all to the site.
+#   OLD_BASE_PATH A path the site used to have on DOMAIN, or several separated by commas.
+#                 Apache redirects each address under it to the same page under BASE_PATH.
 #   WOW_DOMAIN    A domain the World of Warcraft pages used to have to themselves, or
 #                 several separated by commas. Whatever serves it must send it all to the
 #                 site, which then redirects each address to the same page under DOMAIN.
@@ -26,19 +28,20 @@ SCOPE="${SCOPE:-eu/commodities}"
 POLL_MINUTES="${POLL_MINUTES:-5}"
 DOMAIN="${DOMAIN:-}"
 BASE_PATH="${BASE_PATH:-}"
+OLD_BASE_PATH="${OLD_BASE_PATH:-}"
 WOW_DOMAIN="${WOW_DOMAIN:-}"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP=/opt/ludeal
-ETC=/etc/ludeal
-BACKUP_DIR=/var/backups/ludeal
+APP=/opt/playdeals
+ETC=/etc/playdeals
+BACKUP_DIR=/var/backups/playdeals
 FETCHER_ENV="$ETC/fetcher.env"
 SITE_ENV="$ETC/site.env"
-SERVICE_USER=ludeal
-OWNER_ROLE=ludeal
-SITE_ROLE=ludeal_site
-DATABASE=ludeal_wow
-ACCOUNTS_DATABASE=ludeal_accounts
+SERVICE_USER=playdeals
+OWNER_ROLE=playdeals
+SITE_ROLE=playdeals_site
+DATABASE=playdeals_wow
+ACCOUNTS_DATABASE=playdeals_accounts
 # Below this much memory and without swap, compiling can get killed.
 SWAP_BELOW_MB=4000
 SWAP_FILE=/swapfile
@@ -129,9 +132,11 @@ load_saved_settings() {
   if [ -f "$SITE_ENV" ]; then
     [ -n "$DOMAIN" ] || DOMAIN="$(value_of SITE_HOST "$SITE_ENV")"
     [ -n "$BASE_PATH" ] || BASE_PATH="$(value_of RAILS_RELATIVE_URL_ROOT "$SITE_ENV")"
+    [ -n "$OLD_BASE_PATH" ] || OLD_BASE_PATH="$(value_of OLD_BASE_PATH "$SITE_ENV")"
     [ -n "$WOW_DOMAIN" ] || WOW_DOMAIN="$(value_of WOW_HOSTS "$SITE_ENV")"
   fi
   check_base_path
+  check_old_base_path
   [[ "$WOW_DOMAIN" =~ ^[A-Za-z0-9.,-]*$ ]] || die "WOW_DOMAIN must look like wow.example.com, not $WOW_DOMAIN"
   [ -z "$WOW_DOMAIN" ] || [ -n "$DOMAIN" ] || die "WOW_DOMAIN needs DOMAIN, where its addresses lead"
 }
@@ -140,22 +145,34 @@ load_saved_settings() {
 # the domain is no path at all, as the site then has the domain to itself.
 check_base_path() {
   while [ "${BASE_PATH%/}" != "$BASE_PATH" ]; do BASE_PATH="${BASE_PATH%/}"; done
-  [[ "$BASE_PATH" =~ ^(/[A-Za-z0-9_-]+)*$ ]] || die "BASE_PATH must look like /ludeal, not $BASE_PATH"
+  [[ "$BASE_PATH" =~ ^(/[A-Za-z0-9_-]+)*$ ]] || die "BASE_PATH must look like /playdeals, not $BASE_PATH"
 }
 
-# An install from when the project had another name: wow-market, then wow-trading.
-# Installing next to it would start from empty databases while its services kept the port
-# and the history. Its directories move last, so that a run stopped halfway comes back
-# here and finishes.
+# Only Apache's route on a shared domain redirects them: a domain of the site's own is its
+# virtual host's job.
+check_old_base_path() {
+  [ -n "$OLD_BASE_PATH" ] || return 0
+  [ -n "$BASE_PATH" ] || die "OLD_BASE_PATH needs BASE_PATH, the path its addresses lead to"
+  local path
+  for path in ${OLD_BASE_PATH//,/ }; do
+    [[ "$path" =~ ^(/[A-Za-z0-9_-]+)+$ ]] || die "OLD_BASE_PATH must look like /ludeal, not $path"
+    [ "$path" != "$BASE_PATH" ] || die "OLD_BASE_PATH cannot be BASE_PATH itself, $BASE_PATH"
+  done
+}
+
+# An install from when the project had another name: wow-market, wow-trading, then
+# Ludeal. Installing next to it would start from empty databases while its services kept
+# the port and the history. Its directories move last, so that a run stopped halfway comes
+# back here and finishes.
 #
-#   rename_old_install <name> <user and role> <database>
+#   rename_old_install <name> <user and role> <market database> <accounts database> <fetcher>
 rename_old_install() {
-  local old="$1" old_user="$2" old_database="$3"
+  local old="$1" old_user="$2" old_database="$3" old_accounts_database="$4" fetcher="$5"
   [ -d "/opt/$old" ] || [ -d "/etc/$old" ] || return 0
-  step "Renaming the existing $old install to ludeal"
+  step "Renaming the existing $old install to playdeals"
 
   local unit
-  for unit in fetcher.timer fetcher.service site.service alerts.timer alerts.service backup.timer backup.service; do
+  for unit in "$fetcher.timer" "$fetcher.service" site.service alerts.timer alerts.service backup.timer backup.service; do
     systemctl disable --now "$old-$unit" 2>/dev/null || true
     rm -f "/etc/systemd/system/$old-$unit"
   done
@@ -171,7 +188,7 @@ rename_old_install() {
   rename_role "$old_user" "$OWNER_ROLE"
   rename_role "${old_user}_site" "$SITE_ROLE"
   rename_database "$old_database" "$DATABASE"
-  rename_database "${old_database}_accounts" "$ACCOUNTS_DATABASE"
+  rename_database "$old_accounts_database" "$ACCOUNTS_DATABASE"
   # ensure_database writes it again under its new name.
   rm -f /etc/postgresql/*/main/conf.d/"$old".conf
 
@@ -181,7 +198,7 @@ rename_old_install() {
     if [ -f "$file" ]; then
       sed -i -E \
         -e "s#^(DATABASE_URL=postgres://)$old_user(_site)?:(.*/)$old_database\$#\\1$OWNER_ROLE\\2:\\3$DATABASE#" \
-        -e "s#^(ACCOUNTS_DATABASE_URL=postgres://)${old_user}_site:(.*/)${old_database}_accounts\$#\\1$SITE_ROLE:\\2$ACCOUNTS_DATABASE#" \
+        -e "s#^(ACCOUNTS_DATABASE_URL=postgres://)${old_user}_site:(.*/)$old_accounts_database\$#\\1$SITE_ROLE:\\2$ACCOUNTS_DATABASE#" \
         "$file"
     fi
   done
@@ -202,7 +219,7 @@ rename_old_install() {
   fi
   if [ -d "/opt/$old" ]; then
     # The fetcher has a new name too: it is built again rather than found under the old one.
-    rm -f "/opt/$old/bin/$old-fetcher" "/opt/$old/bin/.sources-hash"
+    rm -f "/opt/$old/bin/$old-$fetcher" "/opt/$old/bin/.sources-hash"
     mv "/opt/$old" "$APP"
   fi
 }
@@ -252,7 +269,7 @@ SQL
 
   local version conf memory_mb shared_buffers
   version="$(psql_as_admin -tAc "SHOW server_version_num" | cut -c1-2)"
-  conf="/etc/postgresql/$version/main/conf.d/ludeal.conf"
+  conf="/etc/postgresql/$version/main/conf.d/playdeals.conf"
   memory_mb="$(awk '/MemTotal/ { print int($2 / 1024) }' /proc/meminfo)"
   shared_buffers=$(( memory_mb / 4 ))
   # Losing the last commits in a crash is fine: the next cycle gets those snapshots again.
@@ -311,12 +328,15 @@ ENV
   fi
 
   # Set on every run, as a domain can be added later.
-  sed -i '/^SITE_HOST=/d;/^RAILS_RELATIVE_URL_ROOT=/d;/^WOW_HOSTS=/d' "$SITE_ENV"
+  sed -i '/^SITE_HOST=/d;/^RAILS_RELATIVE_URL_ROOT=/d;/^OLD_BASE_PATH=/d;/^WOW_HOSTS=/d' "$SITE_ENV"
   if [ -n "$DOMAIN" ]; then
     echo "SITE_HOST=$DOMAIN" >> "$SITE_ENV"
   fi
   if [ -n "$BASE_PATH" ]; then
     echo "RAILS_RELATIVE_URL_ROOT=$BASE_PATH" >> "$SITE_ENV"
+  fi
+  if [ -n "$OLD_BASE_PATH" ]; then
+    echo "OLD_BASE_PATH=$OLD_BASE_PATH" >> "$SITE_ENV"
   fi
   if [ -n "$WOW_DOMAIN" ]; then
     echo "WOW_HOSTS=$WOW_DOMAIN" >> "$SITE_ENV"
@@ -357,7 +377,7 @@ build_fetcher() {
   local hash toolchain
   hash="$(fetcher_sources_hash)"
   # Without a change there, an update of the site need not take a compilation.
-  if [ -x "$APP/bin/ludeal-wow-fetcher" ] && [ "$(cat "$APP/bin/.sources-hash" 2>/dev/null)" = "$hash" ]; then
+  if [ -x "$APP/bin/playdeals-wow-fetcher" ] && [ "$(cat "$APP/bin/.sources-hash" 2>/dev/null)" = "$hash" ]; then
     step "The fetcher has not changed: not building it again"
     return
   fi
@@ -368,8 +388,8 @@ build_fetcher() {
 
   as_builder rustup toolchain install "$toolchain" --profile minimal --no-self-update
   # `rustup run` rather than `cargo`, which the rustup package may not put on the PATH.
-  as_builder rustup run "$toolchain" cargo build --release --locked --jobs "$(build_jobs)" -p ludeal-wow-fetcher
-  install -m 755 "$REPO/target/release/ludeal-wow-fetcher" "$APP/bin/ludeal-wow-fetcher"
+  as_builder rustup run "$toolchain" cargo build --release --locked --jobs "$(build_jobs)" -p playdeals-wow-fetcher
+  install -m 755 "$REPO/target/release/playdeals-wow-fetcher" "$APP/bin/playdeals-wow-fetcher"
   printf '%s' "$hash" > "$APP/bin/.sources-hash"
 
   # All of this comes back at the next build, which then only costs time.
@@ -425,19 +445,19 @@ migrate_accounts() {
 
 install_units() {
   step "Installing the systemd units"
-  install -m 644 "$REPO/deploy/ludeal-wow-fetcher.service" /etc/systemd/system/
-  install -m 644 "$REPO/deploy/ludeal-site.service" /etc/systemd/system/
-  install -m 644 "$REPO/deploy/ludeal-alerts.service" /etc/systemd/system/
-  install -m 644 "$REPO/deploy/ludeal-backup.service" "$REPO/deploy/ludeal-backup.timer" /etc/systemd/system/
+  install -m 644 "$REPO/deploy/playdeals-wow-fetcher.service" /etc/systemd/system/
+  install -m 644 "$REPO/deploy/playdeals-site.service" /etc/systemd/system/
+  install -m 644 "$REPO/deploy/playdeals-alerts.service" /etc/systemd/system/
+  install -m 644 "$REPO/deploy/playdeals-backup.service" "$REPO/deploy/playdeals-backup.timer" /etc/systemd/system/
   install -m 755 "$REPO/deploy/backup.sh" "$APP/bin/backup.sh"
   install -d -m 700 -o postgres -g postgres "$BACKUP_DIR"
-  sed "s|^OnCalendar=.*|OnCalendar=*:0/$POLL_MINUTES|" "$REPO/deploy/ludeal-wow-fetcher.timer" \
-    > /etc/systemd/system/ludeal-wow-fetcher.timer
-  chmod 644 /etc/systemd/system/ludeal-wow-fetcher.timer
+  sed "s|^OnCalendar=.*|OnCalendar=*:0/$POLL_MINUTES|" "$REPO/deploy/playdeals-wow-fetcher.timer" \
+    > /etc/systemd/system/playdeals-wow-fetcher.timer
+  chmod 644 /etc/systemd/system/playdeals-wow-fetcher.timer
   # Two minutes after the fetcher's, to find what it has just stored.
-  sed "s|^OnCalendar=.*|OnCalendar=*:2/$POLL_MINUTES|" "$REPO/deploy/ludeal-alerts.timer" \
-    > /etc/systemd/system/ludeal-alerts.timer
-  chmod 644 /etc/systemd/system/ludeal-alerts.timer
+  sed "s|^OnCalendar=.*|OnCalendar=*:2/$POLL_MINUTES|" "$REPO/deploy/playdeals-alerts.timer" \
+    > /etc/systemd/system/playdeals-alerts.timer
+  chmod 644 /etc/systemd/system/playdeals-alerts.timer
   systemctl daemon-reload
 }
 
@@ -450,8 +470,8 @@ configure_web_server() {
   fi
 }
 
-APACHE_ROUTE=/etc/apache2/conf-available/ludeal.conf
-APACHE_ROUTE_ENABLED=/etc/apache2/conf-enabled/ludeal.conf
+APACHE_ROUTE=/etc/apache2/conf-available/playdeals.conf
+APACHE_ROUTE_ENABLED=/etc/apache2/conf-enabled/playdeals.conf
 
 # Apache already answers here: Caddy could not take its ports, and the domain may serve
 # other things. The route below applies to every domain Apache serves, so it only ever
@@ -464,13 +484,13 @@ configure_apache() {
   if [ -z "$BASE_PATH" ]; then
     remove_apache_route
     grep -q '127\.0\.0\.1:3000' "$vhost" ||
-      die "Apache serves $DOMAIN from $vhost, which does not send it to the site: add ProxyPass / http://127.0.0.1:3000/ to it, or give the site a path of its own with BASE_PATH, like /ludeal"
+      die "Apache serves $DOMAIN from $vhost, which does not send it to the site: add ProxyPass / http://127.0.0.1:3000/ to it, or give the site a path of its own with BASE_PATH, like /playdeals"
     step "Apache sends https://$DOMAIN to the site from $vhost: leaving it as it is"
     return
   fi
 
   step "Configuring Apache for https://$DOMAIN$BASE_PATH"
-  a2enmod -q proxy proxy_http headers
+  a2enmod -q proxy proxy_http headers alias
   cat > "$APACHE_ROUTE" <<APACHE
 # Written by deploy/install.sh.
 <Location "$BASE_PATH">
@@ -480,9 +500,14 @@ configure_apache() {
 	RequestHeader set X-Forwarded-Proto "https"
 </Location>
 APACHE
-  a2enconf -q ludeal
+  # Where the site used to be: links and bookmarks lead to the same page, query included.
+  local path
+  for path in ${OLD_BASE_PATH//,/ }; do
+    printf 'RedirectMatch permanent "^%s(/.*)?$" "%s$1"\n' "$path" "$BASE_PATH" >> "$APACHE_ROUTE"
+  done
+  a2enconf -q playdeals
   if ! apache2ctl configtest 2>/dev/null; then
-    a2disconf -q ludeal
+    a2disconf -q playdeals
     die "Apache refuses this configuration: it was disabled again, and Apache left running as it was"
   fi
   # New modules take a restart.
@@ -500,7 +525,7 @@ remove_apache_route() {
   [ -e "$APACHE_ROUTE_ENABLED" ] || return 0
   grep -q 'Written by deploy/install.sh' "$APACHE_ROUTE" 2>/dev/null || return 0
   step "Removing the Apache route of an earlier install, which every domain of this server got"
-  a2disconf -q ludeal
+  a2disconf -q playdeals
   systemctl reload apache2
 }
 
@@ -509,7 +534,7 @@ configure_caddy() {
   apt-get install -y -qq caddy
   local caddyfile=/etc/caddy/Caddyfile
   if [ -f "$caddyfile" ] && ! grep -q 'Written by deploy/install.sh' "$caddyfile"; then
-    cp "$caddyfile" "$caddyfile.before-ludeal"
+    cp "$caddyfile" "$caddyfile.before-playdeals"
   fi
   cat > "$caddyfile" <<CADDY
 # Written by deploy/install.sh.
@@ -527,42 +552,42 @@ has_credentials() {
 }
 
 start_services() {
-  systemctl enable ludeal-site.service
-  systemctl restart ludeal-site.service
-  systemctl enable ludeal-wow-fetcher.timer
+  systemctl enable playdeals-site.service
+  systemctl restart playdeals-site.service
+  systemctl enable playdeals-wow-fetcher.timer
 
-  systemctl enable --now ludeal-backup.timer
+  systemctl enable --now playdeals-backup.timer
   # Without waiting for the night: a new install deserves a first backup too.
   if [ -z "$(ls -A "$BACKUP_DIR")" ]; then
-    systemctl start --no-block ludeal-backup.service
+    systemctl start --no-block playdeals-backup.service
   fi
 
   # Starting Rails every few minutes is only worth it with a way to send the emails.
   if [ -n "$(value_of SMTP_ADDRESS "$SITE_ENV")" ]; then
-    systemctl enable ludeal-alerts.timer
-    systemctl restart ludeal-alerts.timer
+    systemctl enable playdeals-alerts.timer
+    systemctl restart playdeals-alerts.timer
   else
-    systemctl disable --now ludeal-alerts.timer 2>/dev/null || true
+    systemctl disable --now playdeals-alerts.timer 2>/dev/null || true
   fi
 
   if has_credentials; then
-    systemctl restart ludeal-wow-fetcher.timer
+    systemctl restart playdeals-wow-fetcher.timer
     # Without waiting for it: a first cycle takes minutes. Not an error if one is running.
-    systemctl start --no-block ludeal-wow-fetcher.service
+    systemctl start --no-block playdeals-wow-fetcher.service
     step "Done. Check with: sudo $REPO/deploy/check.sh"
     if [ -n "$DOMAIN" ]; then
       printf 'For players to sign in, add this redirect URL to your client on develop.battle.net:\n  https://%s%s/auth/battlenet/callback\n' "$DOMAIN" "$BASE_PATH"
     fi
   else
-    systemctl stop ludeal-wow-fetcher.timer
+    systemctl stop playdeals-wow-fetcher.timer
     step "Almost done: Battle.net credentials are missing"
     cat <<TEXT
 1. Create a client on https://develop.battle.net/access/clients
 2. Fill in BLIZZARD_CLIENT_ID and BLIZZARD_CLIENT_SECRET:
      sudo nano $FETCHER_ENV
 3. Start fetching:
-     sudo systemctl enable --now ludeal-wow-fetcher.timer
-     sudo systemctl start --no-block ludeal-wow-fetcher.service
+     sudo systemctl enable --now playdeals-wow-fetcher.timer
+     sudo systemctl start --no-block playdeals-wow-fetcher.service
 4. Run this script again, so that players can sign in with that client too.
 5. Check with:
      sudo $REPO/deploy/check.sh
@@ -585,8 +610,9 @@ TEXT
 }
 
 ensure_packages
-rename_old_install wow-market wowmarket wow_market
-rename_old_install wow-trading wowtrading wow_trading
+rename_old_install wow-market wowmarket wow_market wow_market_accounts fetcher
+rename_old_install wow-trading wowtrading wow_trading wow_trading_accounts fetcher
+rename_old_install ludeal ludeal ludeal_wow ludeal_accounts wow-fetcher
 load_saved_settings
 ensure_swap
 ensure_user

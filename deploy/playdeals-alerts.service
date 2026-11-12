@@ -1,17 +1,17 @@
 # Emails players whose products reached their target price, started by
-# ludeal-alerts.timer. See deploy/README.md.
+# playdeals-alerts.timer. See deploy/README.md.
 [Unit]
-Description=Ludeal: email players about their target prices
+Description=Play Deals: email players about their target prices
 After=network-online.target postgresql.service
 Wants=network-online.target
 Requires=postgresql.service
 
 [Service]
 Type=oneshot
-User=ludeal
-Group=ludeal
-WorkingDirectory=/opt/ludeal/web
-EnvironmentFile=/etc/ludeal/site.env
+User=playdeals
+Group=playdeals
+WorkingDirectory=/opt/playdeals/web
+EnvironmentFile=/etc/playdeals/site.env
 Environment=RAILS_ENV=production RAILS_MAX_THREADS=1 BUNDLE_DEPLOYMENT=1
 ExecStart=/usr/bin/env bundle exec rails alerts:deliver
 # A server that does not answer must not hold up the following runs forever.
@@ -24,7 +24,7 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ludeal/web/tmp /opt/ludeal/web/log
+ReadWritePaths=/opt/playdeals/web/tmp /opt/playdeals/web/log
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

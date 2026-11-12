@@ -169,7 +169,7 @@
 
   // Products this browser opened, newest first, kept in it alone: the server never sees
   // this list. Storage may be refused, as in a private window: then there is none.
-  const RECENT_KEY = "ludeal:wow:recent";
+  const RECENT_KEY = "playdeals:wow:recent";
   const RECENT_LIMIT = 8;
 
   function validRecent(item) {

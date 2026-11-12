@@ -61,7 +61,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     get root_path
 
     assert_response :success
-    assert_select "title", "Ludeal"
+    assert_select "title", "Play Deals"
     assert_select ".game-card[href=?]", wow_path, /World of Warcraft/
     assert_select ".brand[href=?]", root_path
     assert_select ".game-link[href=?]", wow_path

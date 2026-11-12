@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Says whether Ludeal is working on this server. Prints no secret, so its output
+# Says whether Play Deals is working on this server. Prints no secret, so its output
 # can be shared to get help.
 #
 #   sudo ./deploy/check.sh
@@ -8,9 +8,9 @@ set -uo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "run this as root: sudo $0" >&2; exit 1; }
 
-ETC=/etc/ludeal
-BACKUPS=/var/backups/ludeal
-DATABASE=ludeal_wow
+ETC=/etc/playdeals
+BACKUPS=/var/backups/playdeals
+DATABASE=playdeals_wow
 failed=0
 
 ok() { printf '  ok    %s\n' "$*"; }
@@ -39,15 +39,15 @@ fi
 printf '  scope: %s\n' "$(sed -n 's/^WOW_SCOPE=//p' "$ETC/fetcher.env" 2>/dev/null)"
 
 echo "Services"
-for unit in postgresql ludeal-site.service ludeal-wow-fetcher.timer ludeal-backup.timer; do
+for unit in postgresql playdeals-site.service playdeals-wow-fetcher.timer playdeals-backup.timer; do
   if systemctl is-active --quiet "$unit"; then ok "$unit is running"; else bad "$unit is not running"; fi
 done
-systemctl list-timers ludeal-wow-fetcher.timer --no-pager --no-legend | sed 's/^/  next: /'
+systemctl list-timers playdeals-wow-fetcher.timer --no-pager --no-legend | sed 's/^/  next: /'
 if grep -q '^SMTP_ADDRESS=.' "$ETC/site.env" 2>/dev/null; then
-  if systemctl is-active --quiet ludeal-alerts.timer; then ok "ludeal-alerts.timer is running"; else bad "ludeal-alerts.timer is not running"; fi
+  if systemctl is-active --quiet playdeals-alerts.timer; then ok "playdeals-alerts.timer is running"; else bad "playdeals-alerts.timer is not running"; fi
 fi
-result="$(systemctl show ludeal-wow-fetcher.service --property=Result --value)"
-state="$(systemctl show ludeal-wow-fetcher.service --property=ActiveState --value)"
+result="$(systemctl show playdeals-wow-fetcher.service --property=Result --value)"
+state="$(systemctl show playdeals-wow-fetcher.service --property=ActiveState --value)"
 if [ "$result" = "success" ]; then
   ok "last cycle succeeded (now: $state)"
 else
@@ -70,6 +70,15 @@ if [ -n "$site_host" ]; then
     bad "does not answer on https://$site_host$base_path: check its DNS, and that ports 80 and 443 are open"
   fi
 fi
+# A path the site used to have: its addresses lead to the same page under the new one.
+for old_path in $(sed -n 's/^OLD_BASE_PATH=//p' "$ETC/site.env" 2>/dev/null | tr ',' ' '); do
+  target="$(curl --silent --max-time 15 --output /dev/null --write-out '%{redirect_url}' "https://$site_host$old_path/wow?x=1")"
+  if [ "$target" = "https://$site_host$base_path/wow?x=1" ]; then
+    ok "https://$site_host$old_path leads to https://$site_host$base_path"
+  else
+    bad "https://$site_host$old_path does not lead to https://$site_host$base_path: run install.sh again"
+  fi
+done
 # A domain the World of Warcraft pages had to themselves: its addresses lead to the site.
 for old_host in $(sed -n 's/^WOW_HOSTS=//p' "$ETC/site.env" 2>/dev/null | tr ',' ' '); do
   target="$(curl --silent --max-time 15 --output /dev/null --write-out '%{redirect_url}' "https://$old_host/")"
@@ -111,7 +120,7 @@ echo "Backups"
 for name in accounts market; do
   latest="$(find "$BACKUPS" -maxdepth 1 -type f -name "$name-*.dump" -printf '%T@ %s %f\n' 2>/dev/null | sort -n | tail -n 1)"
   if [ -z "$latest" ]; then
-    bad "no backup of the $name in $BACKUPS yet: journalctl -u ludeal-backup.service"
+    bad "no backup of the $name in $BACKUPS yet: journalctl -u playdeals-backup.service"
     continue
   fi
   read -r modified size file <<<"$latest"
@@ -119,20 +128,20 @@ for name in accounts market; do
   if [ "$hours" -le 30 ]; then
     ok "$file, $(numfmt --to=iec "$size")B, $hours hours old"
   else
-    bad "the latest backup of the $name is $hours hours old: journalctl -u ludeal-backup.service"
+    bad "the latest backup of the $name is $hours hours old: journalctl -u playdeals-backup.service"
   fi
 done
 echo "  These copies are on this server's own disk: see deploy/README.md to keep one elsewhere."
 
 echo "Recent problems in the fetcher's logs"
-journalctl --unit ludeal-wow-fetcher.service --since "-3 hours" --no-pager --output=cat --priority=warning 2>/dev/null | tail -n 5
-journalctl --unit ludeal-wow-fetcher.service --since "-3 hours" --no-pager --output=cat 2>/dev/null |
+journalctl --unit playdeals-wow-fetcher.service --since "-3 hours" --no-pager --output=cat --priority=warning 2>/dev/null | tail -n 5
+journalctl --unit playdeals-wow-fetcher.service --since "-3 hours" --no-pager --output=cat 2>/dev/null |
   grep -E ' (ERROR|WARN) |^error' | cut -c1-200 | tail -n 10
 
 echo
 if [ "$failed" -eq 0 ]; then
   echo "Everything looks fine."
 else
-  echo "Something is wrong: see FAIL above. Logs: journalctl -u ludeal-wow-fetcher.service -u ludeal-site.service -n 100"
+  echo "Something is wrong: see FAIL above. Logs: journalctl -u playdeals-wow-fetcher.service -u playdeals-site.service -n 100"
   exit 1
 fi
