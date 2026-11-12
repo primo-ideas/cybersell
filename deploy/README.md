@@ -2,7 +2,7 @@
 
 For a small Ubuntu 26.04 server, for example a Scaleway instance. A single script installs everything: Postgres, the fetcher and its timer, the site, and Caddy for HTTPS if you give it a domain.
 
-> **Run on one server so far,** under Ubuntu 26.04 with Apache already in front. Installing Caddy, on a server without Apache, has not been tried, nor have alerts through an SMTP server. Neither has [renaming an install from wow-trading](#updating-an-install-from-before-a-rename), which is new. The script is written to be safely run again: if it fails, fix the cause and run it again.
+> **Run on one server so far,** under Ubuntu 26.04 with Apache already in front. Installing Caddy, on a server without Apache, has not been tried, nor have alerts through an SMTP server. [Renaming an install](#updating-an-install-from-before-a-rename) has run there once, from wow-trading. The script is written to be safely run again: if it fails, fix the cause and run it again.
 
 ## Install
 
