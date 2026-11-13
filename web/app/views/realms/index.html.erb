@@ -1,9 +1,12 @@
-<% content_for :title, "Choose your realm" %>
+<% content_for :title, @edition == "classic" ? "Choose your Classic realm" : "Choose your realm" %>
 
 <section class="hero hero-picker">
   <% if @item %>
     <h1>Choose your realm</h1>
     <p class="lead">To see what <strong><%= Product.new(@item, @variant.to_s).name %></strong> sells for there. It will be remembered for your next visits.</p>
+  <% elsif @edition == "classic" %>
+    <h1>Mists of Pandaria Classic prices, realm by realm</h1>
+    <p class="lead">Pick your Classic realm, then look up any item: its price, its trend and how fast it sells. Your realm will be remembered for your next visits.</p>
   <% else %>
     <h1>Auction house prices, realm by realm</h1>
     <p class="lead">Pick your realm, then look up any item: its price, its trend and how fast it sells. Your realm will be remembered for your next visits.</p>
@@ -11,6 +14,7 @@
 
   <% if @realms.any? %>
     <%= form_with url: realms_path, method: :get, class: "realm-picker", role: "search", data: { realm_picker: true, turbo: false } do |form| %>
+      <%= hidden_field_tag :edition, @edition, id: nil if @edition %>
       <% if @item %>
         <%= hidden_field_tag :item, @item.id, id: nil %>
         <%= hidden_field_tag :variant, @variant, id: nil if @variant %>
@@ -18,7 +22,7 @@
       <%= form.label :q, "Your realm", class: "picker-label", for: "realm-picker-input" %>
       <div class="picker-box">
         <%= form.search_field :q, value: @query, id: "realm-picker-input", autofocus: true, autocomplete: "off", spellcheck: false,
-              placeholder: "Type its name, like Hyjal",
+              placeholder: @edition == "classic" ? "Type its name, like Everlook" : "Type its name, like Hyjal",
               role: "combobox", "aria-autocomplete": "list", "aria-controls": "realm-suggestions", "aria-expanded": "false" %>
         <ul id="realm-suggestions" class="search-results" role="listbox" aria-label="Realms" hidden></ul>
       </div>
@@ -32,6 +36,16 @@
         </p>
       <% end %>
     <% end %>
+  <% end %>
+
+  <% unless @item %>
+    <p class="note edition-switch">
+      <% if @edition == "classic" %>
+        Playing today's World of Warcraft? <%= link_to "See its realms", realms_path(edition: "retail") %>.
+      <% else %>
+        Playing Mists of Pandaria Classic? <%= link_to "See its realms", wow_classic_path %>.
+      <% end %>
+    </p>
   <% end %>
 </section>
 

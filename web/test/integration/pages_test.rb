@@ -63,6 +63,7 @@ class PagesTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "title", "Play Deals"
     assert_select ".game-card[href=?]", wow_path, /World of Warcraft/
+    assert_select ".game-card[href=?]", wow_classic_path, /Mists of Pandaria Classic/
     assert_select ".brand[href=?]", root_path
     assert_select ".game-link[href=?]", wow_path
   end
@@ -342,6 +343,28 @@ class PagesTest < ActionDispatch::IntegrationTest
     get item_page(2589, everlook)
 
     assert_response :not_found
+  end
+
+  test "the Classic card leads to Classic realms only, or to a returning player's Classic realm" do
+    seed_item
+    classic = create_market(region: "classic-eu", connected_realm_id: 4440, name: "Everlook")
+    everlook = create_realm(classic, name: "Everlook")
+    create_snapshot(classic, NOW)
+
+    get wow_classic_path
+    assert_response :success
+    assert_select "h1", "Mists of Pandaria Classic prices, realm by realm"
+    assert_select ".realm-list a", count: 1, text: "Everlook"
+    assert_select "input[name=edition][value=classic]"
+    assert_select ".edition-switch a[href=?]", realms_path(edition: "retail")
+
+    get realms_path(edition: "retail")
+    assert_select ".realm-list a", text: "Everlook", count: 0
+    assert_select ".realm-list a", text: "Archimonde"
+
+    get home(everlook)
+    get wow_classic_path
+    assert_redirected_to home(everlook)
   end
 
   test "an unknown realm is not found" do

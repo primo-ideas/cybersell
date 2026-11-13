@@ -28,6 +28,8 @@ Rails.application.routes.draw do
     get "/" => "realms#home", as: :wow
 
     get "realms" => "realms#index", as: :realms
+    # Mists of Pandaria Classic, which the front page offers as a game of its own.
+    get "classic" => "realms#classic", as: :wow_classic
 
     resource :watchlist, only: %i[show update]
     patch "watchlist/target" => "watchlists#target", as: :watchlist_target

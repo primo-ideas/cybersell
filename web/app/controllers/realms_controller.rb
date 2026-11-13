@@ -9,9 +9,24 @@ class RealmsController < ApplicationController
     render :index
   end
 
+  # The realm picker with Classic realms only, or straight to a returning player's realm
+  # when it is one of them.
+  def classic
+    if remembered_realm&.classic?
+      return redirect_to realm_path(remembered_realm.region, remembered_realm.slug)
+    end
+
+    @edition = "classic"
+    index
+    render :index
+  end
+
   # Where a player picks their realm. With an item, picking leads to its page there.
+  # `edition` keeps to today's realms or to Classic ones.
   def index
+    @edition ||= params[:edition].to_s.presence_in(%w[retail classic])
     @realms = Realm.followed(tracked_markets).to_a
+    @realms = @realms.select { |realm| realm.edition == @edition } if @edition
     @query = params[:q].to_s.delete("\0").strip.first(100)
     # Its name as the realm the player comes from knows it.
     @item = Item.where(id: params[:item].to_s[/\A\d{1,9}\z/])
