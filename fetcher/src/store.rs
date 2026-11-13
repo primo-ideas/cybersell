@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use crate::aggregate::{Aggregate, PricePoint};
 use crate::api::{AuctionSource, ConnectedRealm, Item, Pet};
-use crate::config::Region;
+use crate::config::{Edition, Market};
 use crate::sales::{LiveAuction, SalesPoint, decode_state};
 
 /// Display name of the commodity market in `auction_houses`.
@@ -56,6 +56,8 @@ pub struct MarketState {
 #[derive(Debug, Clone)]
 pub struct NewSnapshot<'a> {
     pub auction_house_id: i32,
+    /// Of the market: which rows of `items` and `pets` its products are.
+    pub edition: Edition,
     pub taken_at: DateTime<Utc>,
     pub previous_taken_at: Option<DateTime<Utc>>,
     pub fetched_at: DateTime<Utc>,
@@ -105,24 +107,26 @@ impl Store {
         &self.pool
     }
 
-    pub async fn ensure_commodity_house(&self, region: Region) -> anyhow::Result<()> {
+    pub async fn ensure_commodity_house(&self, market: Market) -> anyhow::Result<()> {
         sqlx::query(
-            "INSERT INTO auction_houses (region, connected_realm_id, name) VALUES ($1, NULL, $2)
+            "INSERT INTO auction_houses (region, edition, connected_realm_id, name)
+             VALUES ($1, $2, NULL, $3)
              ON CONFLICT (region, connected_realm_id) DO NOTHING",
         )
-        .bind(region.as_str())
+        .bind(market.key())
+        .bind(market.edition.as_str())
         .bind(COMMODITIES_NAME)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
-    pub async fn known_connected_realm_ids(&self, region: Region) -> anyhow::Result<Vec<i32>> {
+    pub async fn known_connected_realm_ids(&self, market: Market) -> anyhow::Result<Vec<i32>> {
         let ids = sqlx::query_scalar(
             "SELECT connected_realm_id FROM auction_houses
              WHERE region = $1 AND connected_realm_id IS NOT NULL",
         )
-        .bind(region.as_str())
+        .bind(market.key())
         .fetch_all(&self.pool)
         .await?;
         Ok(ids)
@@ -130,7 +134,7 @@ impl Store {
 
     pub async fn upsert_connected_realm(
         &self,
-        region: Region,
+        market: Market,
         connected_realm: &ConnectedRealm,
     ) -> anyhow::Result<()> {
         let names: Vec<&str> = connected_realm
@@ -141,12 +145,14 @@ impl Store {
 
         let mut tx = self.pool.begin().await?;
         let house_id: i32 = sqlx::query_scalar(
-            "INSERT INTO auction_houses (region, connected_realm_id, name) VALUES ($1, $2, $3)
+            "INSERT INTO auction_houses (region, edition, connected_realm_id, name)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (region, connected_realm_id)
              DO UPDATE SET name = excluded.name
              RETURNING id",
         )
-        .bind(region.as_str())
+        .bind(market.key())
+        .bind(market.edition.as_str())
         .bind(connected_realm.id)
         .bind(names.join(" / "))
         .fetch_one(&mut *tx)
@@ -158,7 +164,7 @@ impl Store {
                  ON CONFLICT (region, slug)
                  DO UPDATE SET name = excluded.name, auction_house_id = excluded.auction_house_id",
             )
-            .bind(region.as_str())
+            .bind(market.key())
             .bind(&realm.slug)
             .bind(&realm.name)
             .bind(house_id)
@@ -169,23 +175,23 @@ impl Store {
         Ok(())
     }
 
-    pub async fn auction_houses(&self, region: Region) -> anyhow::Result<Vec<AuctionHouse>> {
+    pub async fn auction_houses(&self, market: Market) -> anyhow::Result<Vec<AuctionHouse>> {
         let houses = sqlx::query_as(
             "SELECT id, connected_realm_id, name, last_modified FROM auction_houses
              WHERE region = $1 ORDER BY id",
         )
-        .bind(region.as_str())
+        .bind(market.key())
         .fetch_all(&self.pool)
         .await?;
         Ok(houses)
     }
 
     /// `(slug, auction_house_id)` of every known realm of the region.
-    pub async fn realm_slugs(&self, region: Region) -> anyhow::Result<Vec<(String, i32)>> {
+    pub async fn realm_slugs(&self, market: Market) -> anyhow::Result<Vec<(String, i32)>> {
         let slugs = sqlx::query_as(
             "SELECT slug, auction_house_id FROM realms WHERE region = $1 ORDER BY slug",
         )
-        .bind(region.as_str())
+        .bind(market.key())
         .fetch_all(&self.pool)
         .await?;
         Ok(slugs)
@@ -236,7 +242,8 @@ impl Store {
     pub async fn save_snapshot(&self, snapshot: &NewSnapshot<'_>) -> anyhow::Result<bool> {
         self.ensure_partitions(snapshot.taken_at.date_naive())
             .await?;
-        self.register_items(&snapshot.aggregate.points).await?;
+        self.register_items(snapshot.edition, &snapshot.aggregate.points)
+            .await?;
 
         let aggregate = snapshot.aggregate;
         let mut tx = self.pool.begin().await?;
@@ -322,13 +329,14 @@ impl Store {
     /// Outside the snapshot's transaction, which can last a while: markets being
     /// ingested at the same time would wait on each other for the items they share.
     /// Points are sorted by item, which also keeps these inserts free of deadlocks.
-    async fn register_items(&self, points: &[PricePoint]) -> anyhow::Result<()> {
+    async fn register_items(&self, edition: Edition, points: &[PricePoint]) -> anyhow::Result<()> {
         let mut ids: Vec<i32> = points.iter().map(|point| point.item_id).collect();
         ids.dedup();
         sqlx::query(
-            "INSERT INTO items (id) SELECT id FROM UNNEST($1::int[]) AS t(id)
-             ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO items (edition, id) SELECT $1, id FROM UNNEST($2::int[]) AS t(id)
+             ON CONFLICT (edition, id) DO NOTHING",
         )
+        .bind(edition.as_str())
         .bind(ids)
         .execute(&self.pool)
         .await?;
@@ -340,9 +348,10 @@ impl Store {
         species.sort_unstable();
         species.dedup();
         sqlx::query(
-            "INSERT INTO pets (species_id) SELECT id FROM UNNEST($1::int[]) AS t(id)
-             ON CONFLICT (species_id) DO NOTHING",
+            "INSERT INTO pets (edition, species_id) SELECT $1, id FROM UNNEST($2::int[]) AS t(id)
+             ON CONFLICT (edition, species_id) DO NOTHING",
         )
+        .bind(edition.as_str())
         .bind(species)
         .execute(&self.pool)
         .await?;
@@ -444,6 +453,7 @@ impl Store {
     /// default listing: a first install has tens of thousands to go through, over hours.
     pub async fn items_to_resolve(
         &self,
+        edition: Edition,
         unknown_before: DateTime<Utc>,
         limit: usize,
     ) -> anyhow::Result<Vec<i32>> {
@@ -452,15 +462,19 @@ impl Store {
              LEFT JOIN (
                  SELECT item_id, sum(sold_value) AS sold_value
                  FROM listed_products
+                 JOIN auction_houses houses ON houses.id = listed_products.auction_house_id
+                 WHERE houses.edition = $3
                  GROUP BY item_id
              ) listed ON listed.item_id = items.id
-             WHERE (items.name IS NULL OR items.icon_url IS NULL)
+             WHERE items.edition = $3
+               AND (items.name IS NULL OR items.icon_url IS NULL)
                AND (items.resolved_at IS NULL OR items.resolved_at < $1)
              ORDER BY items.resolved_at NULLS FIRST, listed.sold_value DESC NULLS LAST, items.id
              LIMIT $2",
         )
         .bind(unknown_before)
         .bind(limit as i64)
+        .bind(edition.as_str())
         .fetch_all(&self.pool)
         .await?;
         Ok(ids)
@@ -471,6 +485,7 @@ impl Store {
     /// survives an answer that lacks it.
     pub async fn save_item(
         &self,
+        edition: Edition,
         id: i32,
         item: Option<&Item>,
         resolved_at: DateTime<Utc>,
@@ -481,7 +496,7 @@ impl Store {
                  level = COALESCE($3, level), item_class = COALESCE($4, item_class),
                  item_subclass = COALESCE($5, item_subclass),
                  icon_url = COALESCE($8, icon_url), resolved_at = $6
-             WHERE id = $7",
+             WHERE edition = $9 AND id = $7",
         )
         .bind(item.and_then(Item::name))
         .bind(
@@ -500,6 +515,7 @@ impl Store {
         .bind(resolved_at)
         .bind(id)
         .bind(item.and_then(|item| item.icon_url.as_deref()))
+        .bind(edition.as_str())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -509,17 +525,20 @@ impl Store {
     /// of `unknown_before`.
     pub async fn pets_to_resolve(
         &self,
+        edition: Edition,
         unknown_before: DateTime<Utc>,
         limit: usize,
     ) -> anyhow::Result<Vec<i32>> {
         let ids = sqlx::query_scalar(
             "SELECT species_id FROM pets
-             WHERE (name IS NULL OR icon_url IS NULL)
+             WHERE edition = $3
+               AND (name IS NULL OR icon_url IS NULL)
                AND (resolved_at IS NULL OR resolved_at < $1)
              ORDER BY species_id LIMIT $2",
         )
         .bind(unknown_before)
         .bind(limit as i64)
+        .bind(edition.as_str())
         .fetch_all(&self.pool)
         .await?;
         Ok(ids)
@@ -528,6 +547,7 @@ impl Store {
     /// `pet` is `None` when the API does not know this species.
     pub async fn save_pet(
         &self,
+        edition: Edition,
         species_id: i32,
         pet: Option<&Pet>,
         resolved_at: DateTime<Utc>,
@@ -535,12 +555,13 @@ impl Store {
         sqlx::query(
             "UPDATE pets
              SET name = COALESCE($1, name), icon_url = COALESCE($2, icon_url), resolved_at = $3
-             WHERE species_id = $4",
+             WHERE edition = $5 AND species_id = $4",
         )
         .bind(pet.and_then(|pet| pet.name.as_deref()))
         .bind(pet.and_then(|pet| pet.icon_url.as_deref()))
         .bind(resolved_at)
         .bind(species_id)
+        .bind(edition.as_str())
         .execute(&self.pool)
         .await?;
         Ok(())

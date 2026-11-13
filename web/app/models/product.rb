@@ -21,10 +21,13 @@ class Product
 
   def quality = item.quality
 
-  def wowhead_url
-    return "https://www.wowhead.com/battle-pet/#{species_id}" if pet?
+  def classic? = item.edition == "classic"
 
-    "https://www.wowhead.com/item=#{item.id}"
+  def wowhead_url
+    base = classic? ? "https://www.wowhead.com/mop-classic" : "https://www.wowhead.com"
+    return "#{base}/battle-pet/#{species_id}" if pet?
+
+    "#{base}/item=#{item.id}"
   end
 
   private
@@ -34,6 +37,6 @@ class Product
   def pet
     return @pet if defined?(@pet)
 
-    @pet = pet? ? Pet.find_by(species_id: species_id) : nil
+    @pet = pet? ? Pet.of(item.edition).find_by(species_id: species_id) : nil
   end
 end

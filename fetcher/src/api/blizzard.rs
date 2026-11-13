@@ -15,7 +15,7 @@ use super::{
     ApiError, AuctionApi, AuctionSource, AuctionsEnvelope, ConnectedRealm, Fetched, Item, Media,
     Pet, Snapshot, parse_http_date,
 };
-use crate::config::Region;
+use crate::config::{Market, Region};
 
 /// A token this close to expiry is replaced rather than used.
 const TOKEN_EXPIRY_MARGIN: Duration = Duration::from_secs(60);
@@ -121,7 +121,8 @@ pub struct BlizzardClient {
     http: reqwest::Client,
     credentials: Credentials,
     endpoints: Endpoints,
-    region: Region,
+    /// Which namespaces to ask: `dynamic-eu`, or `dynamic-classic-eu` for Classic.
+    market: Market,
     locale: String,
     retry: RetryPolicy,
     /// Held across the token request so concurrent callers share a single refresh.
@@ -134,7 +135,7 @@ impl BlizzardClient {
     pub fn new(
         credentials: Credentials,
         endpoints: Endpoints,
-        region: Region,
+        market: Market,
         locale: impl Into<String>,
         retry: RetryPolicy,
     ) -> Result<Self, ApiError> {
@@ -147,7 +148,7 @@ impl BlizzardClient {
             http,
             credentials,
             endpoints,
-            region,
+            market,
             locale: locale.into(),
             retry,
             token: Mutex::new(None),
@@ -228,8 +229,8 @@ impl BlizzardClient {
         if_modified_since: Option<&str>,
     ) -> Result<Response, ApiError> {
         let namespace = match namespace {
-            Namespace::Dynamic => format!("dynamic-{}", self.region.as_str()),
-            Namespace::Static => format!("static-{}", self.region.as_str()),
+            Namespace::Dynamic => format!("dynamic-{}", self.market.key()),
+            Namespace::Static => format!("static-{}", self.market.key()),
         };
         let mut attempt = 1;
         let mut token_refreshed = false;

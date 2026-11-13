@@ -87,7 +87,7 @@ module MarketData
 
   def create_market(region: "eu", connected_realm_id: 1390, name: "Hyjal")
     id = AuctionHouse.insert_all!(
-      [ { region: region, connected_realm_id: connected_realm_id, name: name } ],
+      [ { region: region, edition: Realm.edition_of(region), connected_realm_id: connected_realm_id, name: name } ],
       returning: :id
     ).first["id"]
     AuctionHouse.find(id)
@@ -102,14 +102,14 @@ module MarketData
     create_market(region: region, connected_realm_id: nil, name: "Commodities")
   end
 
-  def create_item(id, name: "Linen Cloth", quality: "COMMON", item_class: "Tradeskill", item_subclass: "Cloth", icon_url: nil)
-    Item.insert_all!([ { id: id, name: name, quality: quality, item_class: item_class, item_subclass: item_subclass, icon_url: icon_url } ])
-    Item.find(id)
+  def create_item(id, name: "Linen Cloth", quality: "COMMON", item_class: "Tradeskill", item_subclass: "Cloth", icon_url: nil, edition: "retail", level: nil)
+    Item.insert_all!([ { edition: edition, id: id, name: name, quality: quality, item_class: item_class, item_subclass: item_subclass, icon_url: icon_url, level: level } ])
+    Item.of(edition).find(id)
   end
 
-  def create_pet(species_id, name: "Mechanical Squirrel", icon_url: "https://render.example/pet.jpg")
-    Pet.insert_all!([ { species_id: species_id, name: name, icon_url: icon_url } ])
-    Pet.find(species_id)
+  def create_pet(species_id, name: "Mechanical Squirrel", icon_url: "https://render.example/pet.jpg", edition: "retail")
+    Pet.insert_all!([ { edition: edition, species_id: species_id, name: name, icon_url: icon_url } ])
+    Pet.of(edition).find(species_id)
   end
 
   def create_snapshot(market, taken_at, auction_count: 10)

@@ -7,7 +7,7 @@ use sqlx::PgPool;
 use playdeals_wow_fetcher::aggregate::{Aggregate, PricePoint, aggregate};
 use playdeals_wow_fetcher::api::stub::StubApi;
 use playdeals_wow_fetcher::api::{Auction, AuctionItem, AuctionSource};
-use playdeals_wow_fetcher::config::{RealmSelection, Region};
+use playdeals_wow_fetcher::config::{Edition, Market, RealmSelection, Region};
 use playdeals_wow_fetcher::pipeline::{CycleReport, FetchOptions, Fetcher, RegionSource};
 use playdeals_wow_fetcher::sales::{SalesPoint, TimeLeft};
 use playdeals_wow_fetcher::simulation::Simulation;
@@ -43,7 +43,7 @@ fn fetcher_with(
     Fetcher::new(
         vec![RegionSource {
             api,
-            region: Region::Eu,
+            market: Market::retail(Region::Eu),
             realms,
         }],
         Store::from_pool(pool),
@@ -163,18 +163,18 @@ async fn a_snapshot_updates_what_the_site_lists(pool: PgPool) {
 #[sqlx::test]
 async fn what_trades_most_gets_its_name_first(pool: PgPool) {
     sqlx::query(
-        "INSERT INTO auction_houses (region, connected_realm_id, name)
-         VALUES ('eu', 1, 'Hyjal'), ('eu', 2, 'Archimonde')",
+        "INSERT INTO auction_houses (region, edition, connected_realm_id, name)
+         VALUES ('eu', 'retail', 1, 'Hyjal'), ('eu', 'retail', 2, 'Archimonde')",
     )
     .execute(&pool)
     .await
     .unwrap();
     // Never looked up: 1 to 5. Looked up long ago without an answer: 6.
-    sqlx::query("INSERT INTO items (id) SELECT generate_series(1, 5)")
+    sqlx::query("INSERT INTO items (edition, id) SELECT 'retail', generate_series(1, 5)")
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO items (id, resolved_at) VALUES (6, '2000-01-01')")
+    sqlx::query("INSERT INTO items (edition, id, resolved_at) VALUES ('retail', 6, '2000-01-01')")
         .execute(&pool)
         .await
         .unwrap();
@@ -194,7 +194,10 @@ async fn what_trades_most_gets_its_name_first(pool: PgPool) {
     .unwrap();
     let store = Store::from_pool(pool);
 
-    let order = store.items_to_resolve(Utc::now(), 10).await.unwrap();
+    let order = store
+        .items_to_resolve(Edition::Retail, Utc::now(), 10)
+        .await
+        .unwrap();
 
     assert_eq!(order, [4, 3, 1, 2, 5, 6]);
 }
@@ -210,20 +213,14 @@ async fn stored_statistics_resist_an_outlier(pool: PgPool) {
     fetcher.run_cycle().await.unwrap();
 
     // 200 units at 125g, 100 at 130g, and a single troll listing at 999 999g.
-    let (min, median, p75, quantity, auctions, taken_at): (
-        i64,
-        i64,
-        i64,
-        i32,
-        i32,
-        DateTime<Utc>,
-    ) = sqlx::query_as(
-        "SELECT min_price, median_price, p75_price, quantity, auction_count, taken_at
+    let (min, median, p75, quantity, auctions, taken_at): (i64, i64, i64, i32, i32, DateTime<Utc>) =
+        sqlx::query_as(
+            "SELECT min_price, median_price, p75_price, quantity, auction_count, taken_at
          FROM price_points WHERE item_id = 190396",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(min, 1_250_000);
     assert_eq!(median, 1_250_000);
     assert_eq!(p75, 1_300_000);
@@ -494,12 +491,12 @@ async fn regions_are_kept_apart(pool: PgPool) {
         vec![
             RegionSource {
                 api: StubApi::with_fixtures(),
-                region: Region::Eu,
+                market: Market::retail(Region::Eu),
                 realms: RealmSelection::All,
             },
             RegionSource {
                 api: StubApi::with_fixtures(),
-                region: Region::Us,
+                market: Market::retail(Region::Us),
                 realms: slugs(&["hyjal"]),
             },
         ],
@@ -521,6 +518,73 @@ async fn regions_are_kept_apart(pool: PgPool) {
     assert_eq!(houses[0], ("eu".to_owned(), None));
     assert_eq!(houses[3], ("us".to_owned(), None));
     assert_eq!(houses[4], ("us".to_owned(), Some(1302)));
+}
+
+#[sqlx::test]
+async fn classic_is_kept_apart_from_retail(pool: PgPool) {
+    let fetcher = Fetcher::new(
+        vec![
+            RegionSource {
+                api: StubApi::with_fixtures(),
+                market: Market::retail(Region::Eu),
+                realms: slugs(&["hyjal"]),
+            },
+            RegionSource {
+                api: StubApi::with_fixtures(),
+                market: Market::classic(Region::Eu),
+                realms: slugs(&["hyjal"]),
+            },
+        ],
+        Store::from_pool(pool.clone()),
+        options(),
+    );
+
+    let report = fetcher.run_cycle().await.unwrap();
+
+    // Retail: the commodities and Hyjal's auction house. Classic: Hyjal's alone.
+    assert_eq!(report.ingested, 3);
+    let houses: Vec<(String, String, Option<i32>)> = sqlx::query_as(
+        "SELECT region, edition, connected_realm_id FROM auction_houses
+         WHERE id IN (SELECT auction_house_id FROM snapshots)
+         ORDER BY region, connected_realm_id NULLS FIRST",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        houses,
+        [
+            ("classic-eu".to_owned(), "classic".to_owned(), Some(1390)),
+            ("eu".to_owned(), "retail".to_owned(), None),
+            ("eu".to_owned(), "retail".to_owned(), Some(1390)),
+        ]
+    );
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT COUNT(*) FROM realms WHERE region = 'classic-eu' AND slug = 'hyjal'"
+        )
+        .await,
+        1
+    );
+    // Each edition has its own rows for the same items, each looked up from its own API.
+    let named = "SELECT edition, COUNT(*) FROM items WHERE name IS NOT NULL GROUP BY 1 ORDER BY 1";
+    let named: Vec<(String, i64)> = sqlx::query_as(named).fetch_all(&pool).await.unwrap();
+    assert_eq!(named.len(), 2);
+    assert!(named.iter().all(|(_, count)| *count > 0));
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT COUNT(*) FROM items classic JOIN items retail USING (id)
+             WHERE classic.edition = 'classic' AND retail.edition = 'retail'"
+        )
+        .await,
+        count(
+            &pool,
+            "SELECT COUNT(*) FROM items WHERE edition = 'classic'"
+        )
+        .await
+    );
 }
 
 #[sqlx::test]
@@ -798,15 +862,22 @@ async fn an_item_recently_missing_its_icon_is_left_alone(pool: PgPool) {
 #[sqlx::test]
 async fn an_answer_lacking_a_name_keeps_the_one_already_known(pool: PgPool) {
     let store = Store::from_pool(pool.clone());
-    sqlx::query("INSERT INTO items (id, name) VALUES (7, 'Connu')")
+    sqlx::query("INSERT INTO items (edition, id, name) VALUES ('retail', 7, 'Connu')")
         .execute(&pool)
         .await
         .unwrap();
 
-    store.save_item(7, None, Utc::now()).await.unwrap();
+    store
+        .save_item(Edition::Retail, 7, None, Utc::now())
+        .await
+        .unwrap();
 
     assert_eq!(
-        count(&pool, "SELECT COUNT(*) FROM items WHERE id = 7 AND name = 'Connu'").await,
+        count(
+            &pool,
+            "SELECT COUNT(*) FROM items WHERE id = 7 AND name = 'Connu'"
+        )
+        .await,
         1
     );
 }
@@ -814,7 +885,7 @@ async fn an_answer_lacking_a_name_keeps_the_one_already_known(pool: PgPool) {
 #[sqlx::test]
 async fn resolves_the_species_of_caged_pets_and_remembers_unknown_ones(pool: PgPool) {
     let fetcher = fetcher(pool.clone(), StubApi::with_fixtures(), slugs(&["hyjal"]));
-    sqlx::query("INSERT INTO pets (species_id) VALUES (999999)")
+    sqlx::query("INSERT INTO pets (edition, species_id) VALUES ('retail', 999999)")
         .execute(&pool)
         .await
         .unwrap();
@@ -863,8 +934,15 @@ async fn a_species_lookup_failure_is_retried_next_cycle(pool: PgPool) {
 }
 
 async fn commodity_house_id(store: &Store) -> i32 {
-    store.ensure_commodity_house(Region::Eu).await.unwrap();
-    store.auction_houses(Region::Eu).await.unwrap()[0].id
+    store
+        .ensure_commodity_house(Market::retail(Region::Eu))
+        .await
+        .unwrap();
+    store
+        .auction_houses(Market::retail(Region::Eu))
+        .await
+        .unwrap()[0]
+        .id
 }
 
 fn sale(item_id: i32, quantity: i64, value: i64) -> SalesPoint {
@@ -887,6 +965,7 @@ async fn save(
     store
         .save_snapshot(&NewSnapshot {
             auction_house_id: house,
+            edition: Edition::Retail,
             taken_at,
             previous_taken_at: None,
             fetched_at: taken_at,
@@ -925,8 +1004,12 @@ async fn saving_the_same_snapshot_twice_changes_nothing(pool: PgPool) {
     let house = commodity_house_id(&store).await;
     let result = aggregate(&[commodity(1, 100, 1)]);
 
-    let first = save(&store, house, fixture_time(), &result, &[]).await.unwrap();
-    let second = save(&store, house, fixture_time(), &result, &[]).await.unwrap();
+    let first = save(&store, house, fixture_time(), &result, &[])
+        .await
+        .unwrap();
+    let second = save(&store, house, fixture_time(), &result, &[])
+        .await
+        .unwrap();
 
     assert!(first);
     assert!(!second);
@@ -980,27 +1063,15 @@ async fn each_day_gets_its_own_partition(pool: PgPool) {
     .unwrap();
 
     assert_eq!(
-        count(
-            &pool,
-            "SELECT COUNT(*) FROM price_points_20261105"
-        )
-        .await,
+        count(&pool, "SELECT COUNT(*) FROM price_points_20261105").await,
         1
     );
     assert_eq!(
-        count(
-            &pool,
-            "SELECT COUNT(*) FROM price_points_20261106"
-        )
-        .await,
+        count(&pool, "SELECT COUNT(*) FROM price_points_20261106").await,
         1
     );
     assert_eq!(
-        count(
-            &pool,
-            "SELECT COUNT(*) FROM sales_points_20261105"
-        )
-        .await,
+        count(&pool, "SELECT COUNT(*) FROM sales_points_20261105").await,
         1
     );
 }
@@ -1136,13 +1207,7 @@ async fn a_day_at_the_retention_limit_is_kept(pool: PgPool) {
     let same_week = fixture_time() + TimeDelta::days(7);
 
     assert_eq!(store.roll_up_old_partitions(7, same_week).await.unwrap(), 0);
-    assert_eq!(
-        store
-            .roll_up_old_partitions(6, same_week)
-            .await
-            .unwrap(),
-        1
-    );
+    assert_eq!(store.roll_up_old_partitions(6, same_week).await.unwrap(), 1);
 }
 
 #[sqlx::test]
@@ -1257,7 +1322,7 @@ async fn opening_creates_the_database_and_can_be_repeated() {
     let first = Fetcher::new(
         vec![RegionSource {
             api: StubApi::with_fixtures(),
-            region: Region::Eu,
+            market: Market::retail(Region::Eu),
             realms: RealmSelection::CommoditiesOnly,
         }],
         fetcher_store,
@@ -1272,7 +1337,7 @@ async fn opening_creates_the_database_and_can_be_repeated() {
     let second = Fetcher::new(
         vec![RegionSource {
             api: StubApi::with_fixtures(),
-            region: Region::Eu,
+            market: Market::retail(Region::Eu),
             realms: RealmSelection::CommoditiesOnly,
         }],
         store.clone(),

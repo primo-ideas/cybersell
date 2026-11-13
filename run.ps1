@@ -11,8 +11,9 @@ fetching until Ctrl-C. Everything this script started is stopped when it exits.
 
 .PARAMETER Scope
 What to fetch, to go faster than everything: a region (eu), a realm (eu/hyjal),
-only the commodity market (eu/commodities), or a comma-separated mix
-("eu/hyjal,eu/archimonde,us"). Default: every realm of every region.
+only the commodity market (eu/commodities), Mists of Pandaria Classic realms
+(classic-eu, classic-eu/everlook), or a comma-separated mix
+("eu/hyjal,eu/archimonde,us"). Default: every realm of every region, without Classic.
 
 .PARAMETER Config
 File holding the Battle.net credentials, one KEY=VALUE per line, see .env.example.

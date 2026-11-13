@@ -24,7 +24,7 @@ module RealmsHelper
   end
 
   def realm_label(realm)
-    safe_join([ tag.span(realm.region.upcase, class: "region"), " ", tag.span(realm.name, class: "realm-name") ])
+    safe_join([ tag.span(realm.short_region, class: "region"), " ", tag.span(realm.name, class: "realm-name") ])
   end
 
   private

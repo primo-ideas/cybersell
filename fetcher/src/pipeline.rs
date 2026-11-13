@@ -11,7 +11,7 @@ use futures::{StreamExt, stream};
 
 use crate::aggregate::aggregate;
 use crate::api::{ApiError, AuctionApi, Fetched};
-use crate::config::{RealmSelection, Region};
+use crate::config::{Edition, Market, RealmSelection};
 use crate::sales::{encode_state, estimate_sales, live_auctions};
 use crate::store::{AuctionHouse, NewSnapshot, Store};
 
@@ -30,10 +30,10 @@ pub struct FetchOptions {
     pub hourly_retention_days: u32,
 }
 
-/// A region to fetch, and the API client to fetch it with.
+/// A region of one edition to fetch, and the API client to fetch it with.
 pub struct RegionSource<A> {
     pub api: A,
-    pub region: Region,
+    pub market: Market,
     pub realms: RealmSelection,
 }
 
@@ -120,7 +120,9 @@ impl<A: AuctionApi> Fetcher<A> {
     }
 
     async fn ingest_region(&self, source: &RegionSource<A>) -> anyhow::Result<CycleReport> {
-        self.store.ensure_commodity_house(source.region).await?;
+        if source.market.edition.has_commodities() {
+            self.store.ensure_commodity_house(source.market).await?;
+        }
         let directory_is_complete = self.sync_connected_realms(source).await?;
         let houses = self.selected_houses(source, directory_is_complete).await?;
 
@@ -137,7 +139,7 @@ impl<A: AuctionApi> Fetcher<A> {
                 Ok(IngestOutcome::Unchanged) => report.unchanged += 1,
                 Err(error) => {
                     tracing::error!(
-                        region = %source.region,
+                        market = %source.market,
                         house = %house.name,
                         error = format!("{error:#}"),
                         "ingestion failed"
@@ -153,7 +155,7 @@ impl<A: AuctionApi> Fetcher<A> {
     /// their names practically never change. Returns whether every realm of the
     /// region is now known.
     async fn sync_connected_realms(&self, source: &RegionSource<A>) -> anyhow::Result<bool> {
-        let region = source.region;
+        let region = source.market;
         let ids = match source.api.connected_realm_ids().await {
             Ok(ids) => ids,
             Err(error @ ApiError::Auth { .. }) => return Err(error.into()),
@@ -194,7 +196,7 @@ impl<A: AuctionApi> Fetcher<A> {
         source: &RegionSource<A>,
         directory_is_complete: bool,
     ) -> anyhow::Result<Vec<AuctionHouse>> {
-        let region = source.region;
+        let region = source.market;
         let houses = self.store.auction_houses(region).await?;
         let is_commodities = |house: &AuctionHouse| house.connected_realm_id.is_none();
 
@@ -274,6 +276,7 @@ impl<A: AuctionApi> Fetcher<A> {
             .store
             .save_snapshot(&NewSnapshot {
                 auction_house_id: house.id,
+                edition: source.market.edition,
                 taken_at,
                 previous_taken_at,
                 fetched_at: Utc::now(),
@@ -288,7 +291,7 @@ impl<A: AuctionApi> Fetcher<A> {
         }
 
         tracing::info!(
-            region = %source.region,
+            market = %source.market,
             house = %house.name,
             %taken_at,
             auctions = aggregate.auction_count,
@@ -299,14 +302,52 @@ impl<A: AuctionApi> Fetcher<A> {
         Ok(IngestOutcome::Ingested)
     }
 
-    /// Items are the same in every region, so one client is enough.
+    /// A client per edition followed: what it sells is the same in every region.
+    fn source_per_edition(&self) -> Vec<&RegionSource<A>> {
+        Edition::ALL
+            .into_iter()
+            .filter_map(|edition| {
+                self.sources
+                    .iter()
+                    .find(|source| source.market.edition == edition)
+            })
+            .collect()
+    }
+
+    /// The batch is shared between editions: following Classic too must not spend more
+    /// of the Battle.net quota per cycle.
+    fn batch_per_edition(&self, editions: usize) -> usize {
+        (self.options.item_batch / editions.max(1)).max(1)
+    }
+
     async fn resolve_items(&self, report: &mut CycleReport) -> anyhow::Result<()> {
-        let Some(source) = self.sources.first() else {
-            return Ok(());
-        };
+        let sources = self.source_per_edition();
+        let batch = self.batch_per_edition(sources.len());
+        for source in sources {
+            self.resolve_items_of(source, batch, report).await?;
+        }
+        Ok(())
+    }
+
+    async fn resolve_pets(&self, report: &mut CycleReport) -> anyhow::Result<()> {
+        let sources = self.source_per_edition();
+        let batch = self.batch_per_edition(sources.len());
+        for source in sources {
+            self.resolve_pets_of(source, batch, report).await?;
+        }
+        Ok(())
+    }
+
+    async fn resolve_items_of(
+        &self,
+        source: &RegionSource<A>,
+        batch: usize,
+        report: &mut CycleReport,
+    ) -> anyhow::Result<()> {
+        let edition = source.market.edition;
         let ids = self
             .store
-            .items_to_resolve(Utc::now() - UNKNOWN_ITEM_RETRY, self.options.item_batch)
+            .items_to_resolve(edition, Utc::now() - UNKNOWN_ITEM_RETRY, batch)
             .await?;
         let mut lookups = stream::iter(ids)
             .map(|id| async move { (id, source.api.item(id).await) })
@@ -315,13 +356,15 @@ impl<A: AuctionApi> Fetcher<A> {
             match result {
                 Ok(item) => {
                     if item.is_none() {
-                        tracing::info!(id, "item unknown to the item API");
+                        tracing::info!(%edition, id, "item unknown to the item API");
                     }
-                    self.store.save_item(id, item.as_ref(), Utc::now()).await?;
+                    self.store
+                        .save_item(edition, id, item.as_ref(), Utc::now())
+                        .await?;
                     report.items_resolved += 1;
                 }
                 Err(error) => {
-                    tracing::warn!(id, %error, "cannot look up item, will retry");
+                    tracing::warn!(%edition, id, %error, "cannot look up item, will retry");
                     report.items_failed += 1;
                 }
             }
@@ -329,14 +372,16 @@ impl<A: AuctionApi> Fetcher<A> {
         Ok(())
     }
 
-    /// Species are the same in every region, so one client is enough.
-    async fn resolve_pets(&self, report: &mut CycleReport) -> anyhow::Result<()> {
-        let Some(source) = self.sources.first() else {
-            return Ok(());
-        };
+    async fn resolve_pets_of(
+        &self,
+        source: &RegionSource<A>,
+        batch: usize,
+        report: &mut CycleReport,
+    ) -> anyhow::Result<()> {
+        let edition = source.market.edition;
         let ids = self
             .store
-            .pets_to_resolve(Utc::now() - UNKNOWN_ITEM_RETRY, self.options.item_batch)
+            .pets_to_resolve(edition, Utc::now() - UNKNOWN_ITEM_RETRY, batch)
             .await?;
         let mut lookups = stream::iter(ids)
             .map(|id| async move { (id, source.api.pet(id).await) })
@@ -345,13 +390,15 @@ impl<A: AuctionApi> Fetcher<A> {
             match result {
                 Ok(pet) => {
                     if pet.is_none() {
-                        tracing::info!(id, "species unknown to the pet API");
+                        tracing::info!(%edition, id, "species unknown to the pet API");
                     }
-                    self.store.save_pet(id, pet.as_ref(), Utc::now()).await?;
+                    self.store
+                        .save_pet(edition, id, pet.as_ref(), Utc::now())
+                        .await?;
                     report.pets_resolved += 1;
                 }
                 Err(error) => {
-                    tracing::warn!(id, %error, "cannot look up species, will retry");
+                    tracing::warn!(%edition, id, %error, "cannot look up species, will retry");
                     report.pets_failed += 1;
                 }
             }

@@ -67,7 +67,8 @@ class SessionsController < ApplicationController
   # A Battle.net account belongs to one region: its characters are found by asking each
   # region the site follows. Nil if none could be asked, to keep those already known.
   def characters_of(client, token)
-    regions = Realm.distinct.pluck(:region)
+    # Retail characters only: Classic ones are in other namespaces, not asked for yet.
+    regions = Realm.distinct.pluck(:region).reject { |region| Realm.edition_of(region) == "classic" }
     found = false
     characters = regions.flat_map do |region|
       client.characters(token, region).tap { found = true }

@@ -35,7 +35,7 @@ class ProductTest < ActiveSupport::TestCase
   end
 
   test "an item the API does not know has a placeholder name" do
-    Item.insert_all!([ { id: 3 } ])
+    Item.insert_all!([ { edition: "retail", id: 3 } ])
 
     assert_equal "Item #3", Product.new(Item.find(3), "").name
   end

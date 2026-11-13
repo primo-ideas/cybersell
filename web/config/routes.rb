@@ -37,8 +37,9 @@ Rails.application.routes.draw do
     resources :saved_products, only: :update
     resources :trades, only: %i[index create destroy], path: "journal"
 
-    # Everything is seen from a player's realm: /eu/hyjal, /eu/hyjal/items/2589.
-    constraints region: /us|eu|kr|tw/, realm: %r{[^/.]+} do
+    # Everything is seen from a player's realm: /eu/hyjal, /eu/hyjal/items/2589. Mists of
+    # Pandaria Classic realms are in regions of their own: /classic-eu/everlook.
+    constraints region: /(classic-)?(us|eu|kr|tw)/, realm: %r{[^/.]+} do
       get ":region/:realm" => "realms#show", as: :realm
       get ":region/:realm/deals" => "realms#deals", as: :realm_deals
       get ":region/:realm/search" => "search#show", as: :realm_search

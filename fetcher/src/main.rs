@@ -11,7 +11,7 @@ use tracing_subscriber::EnvFilter;
 use playdeals_wow_fetcher::api::AuctionApi;
 use playdeals_wow_fetcher::api::blizzard::{BlizzardClient, Credentials, Endpoints, RetryPolicy};
 use playdeals_wow_fetcher::api::stub::StubApi;
-use playdeals_wow_fetcher::config::{Region, RealmSelection, Scope};
+use playdeals_wow_fetcher::config::{Market, RealmSelection, Region, Scope};
 use playdeals_wow_fetcher::pipeline::{FetchOptions, Fetcher, RegionSource};
 use playdeals_wow_fetcher::simulation::Simulation;
 use playdeals_wow_fetcher::store::Store;
@@ -40,7 +40,8 @@ struct Cli {
     config: Option<PathBuf>,
 
     /// What to fetch: eu, eu/hyjal, eu/commodities, or several separated by commas.
-    /// Default: every realm of every region
+    /// classic-eu, classic-eu/everlook for Mists of Pandaria Classic. Default: every
+    /// realm of every region, without Classic
     #[arg(long, global = true, env = "WOW_SCOPE")]
     scope: Option<Scope>,
 
@@ -60,7 +61,8 @@ struct Cli {
 
     /// Most items, and most pet species, to look up per cycle. Each takes two requests
     /// out of the 36 000 per hour Battle.net allows: at a cycle every 5 minutes, this
-    /// default spends two thirds of them, until everything on sale is known
+    /// default spends two thirds of them, until everything on sale is known. Shared
+    /// between retail and Classic when both are followed
     #[arg(long, global = true, env = "WOW_ITEM_BATCH", default_value_t = 1000)]
     item_batch: usize,
 
@@ -133,9 +135,12 @@ async fn run() -> anyhow::Result<ExitCode> {
 
     if cli.stub {
         // A week of curves for the whole world would only slow the demonstration down.
-        let scope = cli.scope.unwrap_or_else(|| Scope::single(Region::Eu, RealmSelection::All));
+        let scope = cli
+            .scope
+            .unwrap_or_else(|| Scope::single(Market::retail(Region::Eu), RealmSelection::All));
         let url = with_database_suffix(&url, STUB_DATABASE_SUFFIX)?;
-        let fetcher = build_fetcher(&url, &scope, options, |_| Ok(StubApi::with_fixtures())).await?;
+        let fetcher =
+            build_fetcher(&url, &scope, options, |_| Ok(StubApi::with_fixtures())).await?;
 
         println!("Simulating {STUB_HISTORY_HOURS} hours of auctions...");
         for hour in Simulation::ending_at(Utc::now(), STUB_HISTORY_HOURS).hours() {
@@ -155,11 +160,11 @@ async fn run() -> anyhow::Result<ExitCode> {
     };
     let scope = cli.scope.unwrap_or_else(Scope::everything);
     let locale = cli.locale;
-    let fetcher = build_fetcher(&url, &scope, options, |region| {
+    let fetcher = build_fetcher(&url, &scope, options, |market| {
         Ok(BlizzardClient::new(
             credentials.clone(),
-            Endpoints::for_region(region),
-            region,
+            Endpoints::for_region(market.region),
+            market,
             locale.clone(),
             RetryPolicy::default(),
         )?)
@@ -184,18 +189,18 @@ async fn build_fetcher<A: AuctionApi>(
     url: &str,
     scope: &Scope,
     options: FetchOptions,
-    api_for: impl Fn(Region) -> anyhow::Result<A>,
+    api_for: impl Fn(Market) -> anyhow::Result<A>,
 ) -> anyhow::Result<Fetcher<A>> {
-    let regions = scope.regions();
+    let regions = scope.markets();
     // Every simultaneous request may end up writing, plus the item lookups.
     let connections = u32::try_from(options.concurrency * regions.len() + 2).unwrap_or(u32::MAX);
     let store = Store::open(url, connections).await?;
 
     let mut sources = Vec::with_capacity(regions.len());
-    for (region, realms) in regions {
+    for (market, realms) in regions {
         sources.push(RegionSource {
-            api: api_for(*region)?,
-            region: *region,
+            api: api_for(*market)?,
+            market: *market,
             realms: realms.clone(),
         });
     }
@@ -262,7 +267,8 @@ mod tests {
             "postgres://u:p@localhost:5432/market_stub"
         );
         assert_eq!(
-            with_database_suffix("postgres://u:p@localhost/market?sslmode=disable", "_stub").unwrap(),
+            with_database_suffix("postgres://u:p@localhost/market?sslmode=disable", "_stub")
+                .unwrap(),
             "postgres://u:p@localhost/market_stub?sslmode=disable"
         );
     }

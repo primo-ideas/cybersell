@@ -48,7 +48,7 @@
             <% if realm %>
               <%= link_to realm_home_path(realm) do %><%= realm_label(realm) %><% end %>
             <% else %>
-              <span class="muted" data-tip="This site does not follow this realm."><%= character.region.upcase %> <%= character.realm_name %></span>
+              <span class="muted" data-tip="This site does not follow this realm."><%= Realm.short_region(character.region) %> <%= character.realm_name %></span>
             <% end %>
           </li>
         <% end %>

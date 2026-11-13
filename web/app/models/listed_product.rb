@@ -4,10 +4,13 @@ class ListedProduct < ApplicationRecord
   NAME = "COALESCE(pets.name, items.name)".freeze
   SEARCH_NAME = "COALESCE(pets.search_name, items.search_name)".freeze
   LABELS ="#{NAME} AS name, COALESCE(pets.icon_url, items.icon_url) AS icon_url, items.quality".freeze
+  # Names come from the rows of the market's edition: Classic and retail share item ids.
   FROM_WITH_LABELS = <<~SQL.squish.freeze
     FROM listed_products listed
-    LEFT JOIN items ON items.id = listed.item_id
-    LEFT JOIN pets ON pets.species_id = NULLIF(substring(listed.series FROM 5), '')::int
+    JOIN auction_houses listed_house ON listed_house.id = listed.auction_house_id
+    LEFT JOIN items ON items.edition = listed_house.edition AND items.id = listed.item_id
+    LEFT JOIN pets ON pets.edition = listed_house.edition
+      AND pets.species_id = NULLIF(substring(listed.series FROM 5), '')::int
   SQL
 
   # About a day of snapshots: fewer say little about what is usual.

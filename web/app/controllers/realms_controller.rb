@@ -13,7 +13,9 @@ class RealmsController < ApplicationController
   def index
     @realms = Realm.followed(tracked_markets).to_a
     @query = params[:q].to_s.delete("\0").strip.first(100)
-    @item = Item.find_by(id: params[:item].to_s[/\A\d{1,9}\z/])
+    # Its name as the realm the player comes from knows it.
+    @item = Item.where(id: params[:item].to_s[/\A\d{1,9}\z/])
+      .min_by { |item| item.edition == current_realm&.edition ? 0 : 1 }
     @variant = params[:variant].to_s.delete("\0").presence if @item
     @own_realms = own_realms(@realms) if signed_in?
   end
@@ -24,8 +26,9 @@ class RealmsController < ApplicationController
       query: params[:q], item_class: params[:item_class], quality: params[:quality],
       page: params[:page], **listing_order)
     @movers = MarketMovers.new(markets)
-    @item_classes = Rails.cache.fetch("item_classes", expires_in: 1.hour) do
-      Item.where.not(item_class: nil).distinct.pluck(:item_class)
+    edition = current_realm.edition
+    @item_classes = Rails.cache.fetch("item_classes/#{edition}", expires_in: 1.hour) do
+      Item.of(edition).where.not(item_class: nil).distinct.pluck(:item_class)
         .sort_by { |name| ActiveSupport::Inflector.transliterate(name) }
     end
   end

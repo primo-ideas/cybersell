@@ -2,7 +2,7 @@ class ItemsController < ApplicationController
   before_action :load_realm, only: :show
 
   def show
-    @item = Item.find(params[:id])
+    @item = Item.of(current_realm.edition).find(params[:id])
     @market = current_realm.market_of(@item.id)
     @variants = variants_on_sale
     @variant = params[:variant]&.to_s&.delete("\0") || @variants.first&.variant.to_s
@@ -33,7 +33,7 @@ class ItemsController < ApplicationController
   # player's realm, so this one is not remembered.
   def tooltip
     @current_realm = find_realm
-    @item = Item.find(params[:id])
+    @item = Item.of(current_realm.edition).find(params[:id])
     @product = Product.new(@item, params[:variant].to_s.delete("\0"))
     @listed = ListedProduct.find_by(auction_house_id: current_realm.market_ids, item_id: @item.id, series: @product.series)
     render partial: "items/tooltip"

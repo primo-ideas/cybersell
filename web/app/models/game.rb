@@ -9,6 +9,6 @@ Game::ALL = [
   Game.new(
     slug: "wow",
     name: "World of Warcraft",
-    summary: "Auction house prices, realm by realm: trends, estimated sales and deals, about once an hour."
+    summary: "Auction house prices, realm by realm, on today's realms and on Mists of Pandaria Classic: trends, estimated sales and deals, about once an hour."
   )
 ].freeze

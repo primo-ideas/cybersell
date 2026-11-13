@@ -8,7 +8,7 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use playdeals_wow_fetcher::api::blizzard::{BlizzardClient, Credentials, Endpoints, RetryPolicy};
 use playdeals_wow_fetcher::api::{ApiError, AuctionApi, AuctionSource, Fetched};
-use playdeals_wow_fetcher::config::Region;
+use playdeals_wow_fetcher::config::{Market, Region};
 use playdeals_wow_fetcher::sales::TimeLeft;
 
 const INDEX: &str = include_str!("../fixtures/connected_realm_index.json");
@@ -22,13 +22,17 @@ const COMMODITIES_PATH: &str = "/data/wow/auctions/commodities";
 const INDEX_PATH: &str = "/data/wow/connected-realm/index";
 
 fn client(server: &MockServer) -> BlizzardClient {
+    client_for(server, Market::retail(Region::Eu))
+}
+
+fn client_for(server: &MockServer, market: Market) -> BlizzardClient {
     BlizzardClient::new(
         Credentials::new("my-id", "my-secret"),
         Endpoints {
             api_base: server.uri(),
             oauth_token: format!("{}/token", server.uri()),
         },
-        Region::Eu,
+        market,
         "en_US",
         RetryPolicy {
             max_attempts: 3,
@@ -634,4 +638,61 @@ async fn an_unknown_item_is_none_rather_than_an_error() {
         .await;
 
     assert!(client(&server).item(999999).await.unwrap().is_none());
+}
+
+/// As Mists of Pandaria Classic answers: everything on the realm's auction house, stacks
+/// and pets included, with fields retail gear does not have.
+const CLASSIC_AUCTIONS: &str = r#"{
+  "_links": {"self": {"href": "https://eu.api.blizzard.com/data/wow/connected-realm/4440/auctions?namespace=dynamic-classic-eu"}},
+  "connected_realm": {"href": "https://eu.api.blizzard.com/data/wow/connected-realm/4440?namespace=dynamic-classic-eu"},
+  "commodities": {"href": "https://eu.api.blizzard.com/data/wow/auctions/commodities?namespace=dynamic-classic-eu"},
+  "auctions": [
+    {"id": 493493800, "item": {"id": 72092}, "buyout": 600000, "quantity": 20, "time_left": "LONG"},
+    {"id": 493493801, "item": {"id": 82800, "modifiers": [{"type": 6, "value": 90}], "pet_breed_id": 5, "pet_level": 1, "pet_quality_id": 3, "pet_species_id": 1128}, "buyout": 2500000, "quantity": 1, "time_left": "SHORT"},
+    {"id": 493493802, "item": {"id": 6425}, "bid": 1000, "buyout": 50000, "quantity": 1, "time_left": "MEDIUM"}
+  ]
+}"#;
+
+#[tokio::test]
+async fn reads_classic_auctions_and_items_from_classic_namespaces() {
+    let server = MockServer::start().await;
+    mount_token(&server).await;
+    Mock::given(method("GET"))
+        .and(path("/data/wow/connected-realm/4440/auctions"))
+        .and(query_param("namespace", "dynamic-classic-eu"))
+        .respond_with(snapshot(CLASSIC_AUCTIONS))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/data/wow/item/72092"))
+        .and(query_param("namespace", "static-classic-eu"))
+        .respond_with(json(r#"{"id": 72092, "name": "Ghost Iron Ore", "quality": {"type": "COMMON"}, "level": 80}"#))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/data/wow/media/item/72092"))
+        .and(query_param("namespace", "static-classic-eu"))
+        .respond_with(json(r#"{"assets": [{"key": "icon", "value": "https://render.worldofwarcraft.com/classic-eu/icons/56/inv_ore_ghostiron.jpg"}]}"#))
+        .mount(&server)
+        .await;
+    let client = client_for(&server, Market::classic(Region::Eu));
+
+    let Fetched::Snapshot(snapshot) = client
+        .auctions(AuctionSource::ConnectedRealm(4440), None)
+        .await
+        .unwrap()
+    else {
+        panic!("expected a snapshot");
+    };
+    let item = client.item(72092).await.unwrap().unwrap();
+
+    assert_eq!(snapshot.auctions.len(), 3);
+    assert_eq!(snapshot.auctions[0].buyout, Some(600_000));
+    assert_eq!(snapshot.auctions[0].quantity, 20);
+    assert_eq!(snapshot.auctions[1].item.pet_species_id, Some(1128));
+    assert_eq!(item.name(), Some("Ghost Iron Ore"));
+    assert_eq!(item.level, Some(80));
+    assert!(item.icon_url.unwrap().contains("classic-eu"));
 }

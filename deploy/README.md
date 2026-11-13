@@ -166,7 +166,7 @@ The site only offers alerts once it can send emails. Uncomment and fill in `SMTP
 | Run a cycle right now | `sudo systemctl start --no-block playdeals-wow-fetcher.service` |
 | Pause the fetcher | `sudo systemctl stop playdeals-wow-fetcher.timer` |
 | Update | `git pull && sudo ./deploy/install.sh` |
-| Follow other markets | Change `WOW_SCOPE` in `/etc/playdeals/fetcher.env`, taken into account at the next cycle |
+| Follow other markets | Change `WOW_SCOPE` in `/etc/playdeals/fetcher.env`, taken into account at the next cycle. `classic-eu` adds the Mists of Pandaria Classic realms of Europe |
 | Read the alerts' logs | `journalctl -u playdeals-alerts.service -f` |
 | Back up right now | `sudo systemctl start playdeals-backup.service` |
 

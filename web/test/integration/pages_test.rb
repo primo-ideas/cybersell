@@ -292,6 +292,58 @@ class PagesTest < ActionDispatch::IntegrationTest
     assert_select ".empty-state", /No prices yet/
   end
 
+  test "a Mists of Pandaria Classic realm has its own pages, with its own names for items" do
+    seed_item
+    classic = create_market(region: "classic-eu", connected_realm_id: 4440, name: "Everlook")
+    everlook = create_realm(classic, name: "Everlook")
+    create_item(2589, name: "Linen Cloth (Classic)", edition: "classic", level: 12)
+    create_snapshot(classic, NOW)
+    create_price(classic, 2589, NOW, median: 777)
+
+    get home(everlook)
+    assert_response :success
+    assert_equal "/wow/classic-eu/everlook", home(everlook)
+    assert_select "h1", "Everlook"
+    assert_select ".eyebrow", "Europe · Mists of Pandaria Classic"
+    assert_select "a.product-link", "Linen Cloth (Classic)"
+
+    get item_page(2589, everlook)
+    assert_response :success
+    assert_select "h1", "Linen Cloth (Classic)"
+    assert_select "li", "Level 12"
+    assert_select "a[href=?]", "https://www.wowhead.com/mop-classic/item=2589"
+
+    # The retail realm keeps its own name for the same item.
+    get item_page(2589)
+    assert_select "h1", "Linen Cloth"
+    assert_select "a[href=?]", "https://www.wowhead.com/item=2589"
+  end
+
+  test "Classic realms are offered apart from retail ones, even under the same name" do
+    seed_item
+    classic = create_market(region: "classic-eu", connected_realm_id: 4441, name: "Archimonde")
+    create_realm(classic, name: "Archimonde")
+    create_snapshot(classic, NOW)
+
+    get realms_path
+
+    assert_select ".realm-region h2", "Europe"
+    assert_select ".realm-region h2", "Europe · Mists of Pandaria Classic"
+    assert_select "a[data-region=classic-eu][data-region-label=?]", "MoP EU", text: "Archimonde"
+    assert_select "a[data-region=eu][data-region-label=?]", "EU", text: "Archimonde"
+  end
+
+  test "a Classic item is only found on a Classic realm" do
+    seed_item
+    classic = create_market(region: "classic-eu", connected_realm_id: 4440, name: "Everlook")
+    everlook = create_realm(classic, name: "Everlook")
+    create_snapshot(classic, NOW)
+
+    get item_page(2589, everlook)
+
+    assert_response :not_found
+  end
+
   test "an unknown realm is not found" do
     get realm_path("eu", "nowhere")
     assert_response :not_found
@@ -464,7 +516,7 @@ class PagesTest < ActionDispatch::IntegrationTest
   end
 
   test "an item the API does not know still has a page" do
-    Item.insert_all!([ { id: 999999 } ])
+    Item.insert_all!([ { edition: "retail", id: 999999 } ])
     create_snapshot(@market, NOW)
     create_price(@market, 999999, NOW)
 

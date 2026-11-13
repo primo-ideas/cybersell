@@ -2,6 +2,10 @@
 # markets, which the site adds up so that a player never has to know: the auction house
 # it shares with the realms connected to it, and the commodities of its region, where
 # stackable goods trade.
+#
+# Mists of Pandaria Classic realms are realms too, in regions of their own named as
+# Battle.net names them: `classic-eu` next to `eu`. Their auction house sells everything,
+# as Classic has no commodities.
 class Realm < ApplicationRecord
   self.primary_key = %i[region slug]
 
@@ -13,6 +17,24 @@ class Realm < ApplicationRecord
     "kr" => "Korea",
     "tw" => "Taiwan"
   }.freeze
+
+  CLASSIC_PREFIX = "classic-".freeze
+  CLASSIC_NAME = "Mists of Pandaria Classic".freeze
+
+  # Every region the site may know, retail then Classic.
+  REGIONS = (REGION_NAMES.keys + REGION_NAMES.keys.map { |code| "#{CLASSIC_PREFIX}#{code}" }).freeze
+
+  # As in the `edition` columns of the market data.
+  def self.edition_of(region) = region.to_s.start_with?(CLASSIC_PREFIX) ? "classic" : "retail"
+
+  # The Battle.net region behind it: `eu` for `classic-eu` too.
+  def self.region_code(region) = region.to_s.delete_prefix(CLASSIC_PREFIX)
+
+  # As shown next to a realm's name: `EU`, or `MoP EU` for Classic.
+  def self.short_region(region)
+    code = region_code(region).upcase
+    edition_of(region) == "classic" ? "MoP #{code}" : code
+  end
 
   scope :by_name, -> { order(:region, Arel.sql('realms.name COLLATE "und-x-icu"')) }
 
@@ -28,7 +50,19 @@ class Realm < ApplicationRecord
     find_by(region: region.to_s, slug: slug.to_s.delete("\0"))
   end
 
-  def region_name = REGION_NAMES.fetch(region, region.upcase)
+  def region_name
+    name = REGION_NAMES.fetch(region_code, region_code.upcase)
+    classic? ? "#{name} · #{CLASSIC_NAME}" : name
+  end
+
+  def region_code = self.class.region_code(region)
+
+  def short_region = self.class.short_region(region)
+
+  # Which items and pets its products are.
+  def edition = self.class.edition_of(region)
+
+  def classic? = edition == "classic"
 
   # Its own market first: what is on neither is looked for there.
   def markets

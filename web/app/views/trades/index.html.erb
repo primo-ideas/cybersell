@@ -112,7 +112,7 @@
             <td><span class="pill <%= trade.buy? ? "pill-buy" : "pill-sell" %>"><%= trade.buy? ? "Bought" : "Sold" %></span> <%= number_with_delimiter(trade.quantity) %></td>
             <td class="number"><%= money(trade.unit_price) %></td>
             <td class="number col-medium"><%= money(trade.total) %></td>
-            <td class="col-wide muted"><%= trade.region.upcase %> <%= @realm_names.fetch([ trade.region, trade.realm_slug ], trade.realm_slug) %></td>
+            <td class="col-wide muted"><%= Realm.short_region(trade.region) %> <%= @realm_names.fetch([ trade.region, trade.realm_slug ], trade.realm_slug) %></td>
             <td>
               <%= button_to "Remove", trade_path(trade), method: :delete, class: "link-button",
                     form: { data: { turbo_confirm: "Remove this trade from your journal?" } } %>

@@ -53,9 +53,12 @@ class TradesController < ApplicationController
 
   def products_of(trades)
     keys = trades.map { |trade| [ trade.item_id, trade.series ] }.uniq
-    items = Item.where(id: keys.map(&:first).uniq).index_by(&:id)
+    # A product is the same item in either edition: its name as the reader's realm knows it.
+    preferred = current_realm&.edition
+    items = Item.where(id: keys.map(&:first).uniq).group_by(&:id)
+      .transform_values { |rows| rows.min_by { |item| item.edition == preferred ? 0 : 1 } }
     keys.to_h do |item_id, series|
-      item = items[item_id] || Item.new(id: item_id)
+      item = items[item_id] || Item.new(id: item_id, edition: preferred || "retail")
       [ [ item_id, series ], Product.new(item, series) ]
     end
   end

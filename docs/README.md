@@ -14,6 +14,7 @@ The project is **Play Deals**, meant for the domain **playdeals.io**. Until that
 | Shown to readers | Play Deals |
 | Repository | `primo-ideas/playdeals-io` |
 | Everything on the server (user, directories, databases, services) | `playdeals`, `playdeals_*`, `playdeals-*` |
+| Mists of Pandaria Classic markets | `classic-eu`, `classic-us`…, as in Battle.net's namespaces, with `edition = 'classic'` |
 | The World of Warcraft fetcher | `playdeals-wow-fetcher` |
 
 It was called wow-market, then wow-trading, then Ludeal. `deploy/install.sh` renames an install from any of them, keeping its history, accounts and credentials: see [Updating an install from before a rename](../deploy/README.md#updating-an-install-from-before-a-rename). The old addresses keep working: `wow-trading.live` and `primo-ideas.xyz/ludeal` redirect to the same page on the site, and GitHub redirects the old repository names.

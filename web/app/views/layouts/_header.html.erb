@@ -6,7 +6,7 @@
 
   <% if current_realm %>
     <%= link_to realms_path(item: @item&.id, variant: @variant.presence), class: "realm-button",
-          data: { tip: "Change realm" }, "aria-label": "Realm: #{current_realm.name} (#{current_realm.region.upcase}). Change realm" do %>
+          data: { tip: "Change realm" }, "aria-label": "Realm: #{current_realm.name} (#{current_realm.short_region}). Change realm" do %>
       <%= realm_label(current_realm) %>
     <% end %>
 

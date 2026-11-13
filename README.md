@@ -4,7 +4,7 @@
 
 **[primo-ideas.xyz/playdeals](https://primo-ideas.xyz/playdeals/)**, soon on its own domain, playdeals.io.
 
-What things sell for in games: price curves and estimated sales, game by game. World of Warcraft's auction house is the only game so far; the site is laid out for more, each in a section of its own.
+What things sell for in games: price curves and estimated sales, game by game. World of Warcraft's auction house is the only game so far, on today's realms and on Mists of Pandaria Classic ones; the site is laid out for more, each in a section of its own.
 
 - [`fetcher/`](fetcher/): collects World of Warcraft auctions from the Battle.net API and stores statistics in Postgres (Rust).
 - [`web/`](web/): the site, which reads that database and never writes to it, and keeps players' accounts in a database of its own (Rails).
@@ -102,8 +102,16 @@ One or more entries separated by commas, for example `eu/hyjal,eu/archimonde,us`
 | `eu` | Every realm of the region, and its commodities |
 | `eu/hyjal` | This realm, and the commodities of the region |
 | `eu/commodities` | Only the commodities of the region |
+| `classic-eu` | Every Mists of Pandaria Classic realm of the region |
+| `classic-eu/everlook` | This Mists of Pandaria Classic realm |
 
-The regions are `us`, `eu`, `kr` and `tw`.
+The regions are `us`, `eu`, `kr` and `tw`. An empty scope means every realm of every region, without Classic, which must be named.
+
+#### Mists of Pandaria Classic
+
+Battle.net calls it `classic` in its namespaces (`dynamic-classic-eu`), and so does the fetcher: a Classic region is `classic-eu`, in the scope as in the `region` of `auction_houses` and `realms`, and in the site's addresses. Its auction houses sell everything, stacks included, as Classic has no commodity market. Its items and pets have rows of their own, under `edition = 'classic'`: the two games share ids, not always names, levels or icons. The batch of items looked up per cycle is shared between the two editions, so that following Classic does not spend more of the Battle.net quota.
+
+The other Classic flavours are left out on purpose. Classic Era, Hardcore, Season of Discovery and Anniversary realms (`classic1x`, `classicann`) list their auction houses, but Battle.net answers 404 for what is on sale in them, on every realm tried in November 2026.
 
 ### What a cycle does
 
@@ -123,7 +131,7 @@ Prices are in copper (1 gold = 10,000) and dates in UTC.
 
 | Table | Contents |
 | --- | --- |
-| `auction_houses` | A market: a connected realm, or the commodities of the region (`connected_realm_id` is `NULL`) |
+| `auction_houses` | A market: a connected realm, or the commodities of the region (`connected_realm_id` is `NULL`). `edition` is `retail` or `classic`, and `region` is `classic-eu` for the latter |
 | `realms` | Realms and the market each belongs to |
 | `snapshots` | Log of ingested snapshots |
 | `market_states` | Auctions of the latest snapshot of each market, to estimate sales at the next one. Not meant for reading |
@@ -131,8 +139,8 @@ Prices are in copper (1 gold = 10,000) and dates in UTC.
 | `sales_points` | Quantity, value and number of auctions sold, per item, between two snapshots |
 | `price_points_daily`, `sales_points_daily` | The same data, per UTC day, once out of the retention period |
 | `listed_products` | What a market has for sale at the latest snapshot: the variants of a piece of gear added up, 24-hour sales, the 24-hour change, and the usual cheapest price over 3 days. Replaced at each snapshot, this is what the site's listings read |
-| `items` | Name, quality, level, class and icon of items. `name` is `NULL`: not looked up yet, or unknown to the API |
-| `pets` | Name and icon of pet species |
+| `items` | Name, quality, level, class and icon of items, per `edition`. `name` is `NULL`: not looked up yet, or unknown to the API |
+| `pets` | Name and icon of pet species, per `edition` |
 
 `price_points` and `sales_points` have one partition per day. Beyond the retention period, each day is replaced by one row per item in the `*_daily` tables: mean prices and quantities, lowest minimum price, sales added up. This summary is final.
 
@@ -168,7 +176,7 @@ The front page, `/`, lists the games. Each has its section under a short name: `
 A player picks their realm, then searches for an item. Markets never show: each page of a realm adds up the auction house it shares with its connected realms and the commodities of its region, and an item's page is on whichever of the two trades it.
 
 - `/wow`: the last realm visited, or failing that the realm picker (`/wow/realms`), which suggests realms as you type, without regard for accents. A realm can be picked once its own market, or the commodities of its region, are followed.
-- `/wow/:region/:realm`, for example `/wow/eu/hyjal`: a search box, the biggest rises and falls over 24 hours and the most traded, then everything for sale at the latest snapshot, to sort and filter by name, id, category or quality, ignoring accents and case.
+- `/wow/:region/:realm`, for example `/wow/eu/hyjal`, or `/wow/classic-eu/everlook` for a Mists of Pandaria Classic realm, which the picker lists under a region of its own: a search box, the biggest rises and falls over 24 hours and the most traded, then everything for sale at the latest snapshot, to sort and filter by name, id, category or quality, ignoring accents and case.
 - `/wow/:region/:realm/deals`: what sells well below its usual price, with what is left after reselling at that price. See [Deals](#deals).
 - `/wow/:region/:realm/items/:id`: price curves, estimated sales and quantity for sale, over 24 hours, 7, 30 or 90 days, or the whole history. Each chart has its data table. The page also gives the usual cheapest price, when the product sells by hour of the day and day of the week over the last two weeks, the same product on the cheapest realms of the region along with where the reader's own ranks, and a CSV download of the prices (`.csv`, in copper and UTC).
 - `/wow/:region/:realm/search`: searches the realm. The header of each page offers suggestions as you type, with `/` or Ctrl-K to get there.

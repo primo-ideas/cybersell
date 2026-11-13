@@ -77,7 +77,7 @@
           <% realms.each do |realm| %>
             <li <%= "hidden" unless matching.include?(realm) %>>
               <%= link_to realm.name, (@item ? item_on_realm_path(realm, @item.id, variant: @variant) : realm_home_path(realm)),
-                    data: { realm: realm.name, region: realm.region } %>
+                    data: { realm: realm.name, region: realm.region, region_label: realm.short_region } %>
             </li>
           <% end %>
         </ul>

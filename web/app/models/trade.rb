@@ -16,7 +16,7 @@ class Trade < AccountsRecord
   validates :side, inclusion: { in: SIDES }
   validates :quantity, numericality: { only_integer: true, in: 1..MAX_QUANTITY }
   validates :unit_price, numericality: { only_integer: true, in: 1..MoneyInput::MAX }
-  validates :region, inclusion: { in: Realm::REGION_NAMES.keys }
+  validates :region, inclusion: { in: Realm::REGIONS }
   validates :realm_slug, presence: true, length: { maximum: 100 }
   validates :traded_at, presence: true
   validates :note, length: { maximum: 200 }

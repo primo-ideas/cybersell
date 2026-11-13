@@ -292,6 +292,7 @@ BLIZZARD_CLIENT_ID=
 BLIZZARD_CLIENT_SECRET=
 
 # What to fetch: eu, eu/hyjal, eu/commodities, or several separated by commas.
+# classic-eu, classic-eu/everlook for Mists of Pandaria Classic.
 # Each market takes around 1 GB of disk: see deploy/README.md before adding many.
 WOW_SCOPE=$SCOPE
 WOW_LOCALE=en_US

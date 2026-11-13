@@ -4,6 +4,6 @@ class FavoriteRealm < AccountsRecord
 
   belongs_to :user
 
-  validates :region, inclusion: { in: Realm::REGION_NAMES.keys }
+  validates :region, inclusion: { in: Realm::REGIONS }
   validates :slug, presence: true, length: { maximum: 100 }
 end

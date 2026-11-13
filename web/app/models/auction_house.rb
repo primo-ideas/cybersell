@@ -9,5 +9,7 @@ class AuctionHouse < ApplicationRecord
 
   def commodities? = connected_realm_id.nil?
 
+  def classic? = edition == "classic"
+
   def latest_snapshot_at = snapshots.maximum(:taken_at)
 end

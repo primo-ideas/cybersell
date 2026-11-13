@@ -317,6 +317,7 @@
     const realms = [...document.querySelectorAll("[data-realm-directory] a[data-realm]")].map((link) => ({
       name: link.dataset.realm,
       region: link.dataset.region,
+      regionLabel: link.dataset.regionLabel,
       regionName: link.closest("section").querySelector("h2").textContent,
       href: link.href,
       index: indexName(link.dataset.realm)
@@ -353,7 +354,7 @@
 
           const region = document.createElement("span");
           region.className = "region";
-          region.textContent = realm.region.toUpperCase();
+          region.textContent = realm.regionLabel;
 
           const name = document.createElement("span");
           name.className = "result-name";
